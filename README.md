@@ -1,9 +1,11 @@
 # lumbermixalot
+```
 Blender Add-On to make Mixamo Rigs (Characters and Animations) compatible with Amazon Lumberyard game engine
 ------------------------------------------------------------------------------------------------------------
+```
 
 # How To Use
-
+```
 Clone/Download the code.
 Open Blender.
 Open Text View.
@@ -23,3 +25,4 @@ exec(compile(open(filename).read(), filename, 'exec'))
 -------------------------------------
 
 Click the "Run Script" button and the "Lumbermixalot" TAB should show up next to "View", "Tool" and "Item" tabs.
+```
