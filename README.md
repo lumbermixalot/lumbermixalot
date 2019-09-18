@@ -3,10 +3,12 @@ Blender Add-On to make Mixamo Rigs (Characters and Animations) compatible with A
 ------------------------------------------------------------------------------------------------------------
 
 # How To Use
+
 Clone/Download the code.
 Open Blender.
 Open Text View.
 Paste the following code:
+
 -------------------------------------
 import bpy
 import os
