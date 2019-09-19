@@ -1,6 +1,11 @@
 # lumbermixalot
 Blender 2.80 Add-On to make Mixamo Rigs (Characters and Animations) compatible with Amazon Lumberyard game engine
 
+CAVEATS: 
+1. Not tested with older versions of Blender.
+2. This script uses the python modules *scipy* and *numpy*. See the [lumbermixalot wiki](https://github.com/lumbermixalot/lumbermixalot/wiki) for instructions on how to install those modules in python for Blender.
+
+
 # How To Use
 ## Long Story Short
 #### 1. Modify and Recompile Lumberyard.
