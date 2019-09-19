@@ -87,7 +87,7 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
         default = "",
         subtype='DIR_PATH')
     appendAssetTypeToPath: bpy.props.BoolProperty(
-        name="Append Actor/ or Motion/?",
+        name="Append Actor/ or Motions/?",
         description="If True, appends the asset type to the output dir before"
         " exporting.",
         default = True)
@@ -113,7 +113,7 @@ class OBJECT_OT_convert(bpy.types.Operator):
         if context.object == None:
             self.report({'ERROR_INVALID_INPUT'}, "Error: no object selected. Please select the Armature object.")
             return {'CANCELLED'}
-            
+
         if context.object.type != 'ARMATURE':
             self.report({'ERROR_INVALID_INPUT'}, "Error: {} is not an Armature.".format(context.object.name))
             return {'CANCELLED'}

@@ -96,7 +96,7 @@ def _GetOutputFilename(isActor,  fbxFilename, fbxOutputPath,
         if isActor:
             dirToAppend = "Actor"
         else:
-            dirToAppend = "Motion"
+            dirToAppend = "Motions"
         lastDir = os.path.basename(os.path.normpath(fbxOutputPath))
         if lastDir != dirToAppend:
             fbxOutputPath = os.path.join(fbxOutputPath, dirToAppend)
