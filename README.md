@@ -1,8 +1,5 @@
 # lumbermixalot
-```
-Blender Add-On to make Mixamo Rigs (Characters and Animations) compatible with Amazon Lumberyard game engine
-------------------------------------------------------------------------------------------------------------
-```
+Blender 2.80 Add-On to make Mixamo Rigs (Characters and Animations) compatible with Amazon Lumberyard game engine
 
 # How To Use
 ## Long Story Short
