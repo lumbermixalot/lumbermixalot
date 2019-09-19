@@ -61,6 +61,8 @@ code
             ...
         }
 ```
+Now recompile Lumberyard with Visual Studio. 
+
 #### 2. Install Lumbermixalot as a Blender AddOn
 - Download the script as a ZIP file.
 - Open Blender. Menu option Edit --> Preferences

@@ -58,6 +58,18 @@ def ApplyCurrentRotationAs000(obj):
         print("The rotation was already clean")
 
 
+def GetRootBone(obj):
+    """
+    This method assumes the root bone has no siblings.
+    returns the first non parented bone. 
+    """
+    bones = obj.data.bones
+    for bone in bones:
+        if bone.parent == None:
+            return bone
+    return None
+
+
 def HasOnlyOneRootBone(obj):
     """
     Returns True if @obj only has a single root bone without siblings.

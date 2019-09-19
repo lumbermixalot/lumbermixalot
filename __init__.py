@@ -40,14 +40,18 @@ import bpy
 if __package__ is None or __package__ == "":
     # When running as a standalone script from Blender Text View "Run Script"
     import mainmixalot
+    import commonmixalot
 else:
     # When running as an installed AddOn, then it runs in package mode.
     from . import mainmixalot
+    from . import commonmixalot
 
 if "bpy" in locals():
     from importlib import reload
     if "mainmixalot" in locals():
         reload(mainmixalot)
+    if "commonmixalot" in locals():
+        reload(commonmixalot)
 
 
 ###############################################################################
@@ -55,13 +59,6 @@ if "bpy" in locals():
 ###############################################################################
 class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
     """Container of options for Mixamo To Lumberyard Converter"""
-    hipBoneName: bpy.props.StringProperty(
-        name="Hips Bone Name",
-        description="Optional. Name of the 'Hips' bone Hipname from the"
-        " MixamoRig",
-        maxlen = 256,
-        default = "Hips",
-        subtype='BYTE_STRING')
     rootBoneName:  bpy.props.StringProperty(
         name="Root Bone Name",
         description="Optional. Name of the root motion bone that will be added",
@@ -115,16 +112,28 @@ class OBJECT_OT_convert(bpy.types.Operator):
         mixalot = context.scene.mixalot
         if context.object == None:
             self.report({'ERROR_INVALID_INPUT'}, "Error: no object selected. Please select the Armature object.")
-            return{'CANCELLED'}
+            return {'CANCELLED'}
+            
         if context.object.type != 'ARMATURE':
-            self.report({'ERROR_INVALID_INPUT'}, "Error: %s is not an Armature." % context.object.name)
-            return{'CANCELLED'}
+            self.report({'ERROR_INVALID_INPUT'}, "Error: {} is not an Armature.".format(context.object.name))
+            return {'CANCELLED'}
+
+        hip_bone = commonmixalot.GetRootBone(context.object)
+        if hip_bone is None:
+            self.report({'ERROR'}, "Error: The Armature must have at least one bone.")
+            return {'CANCELLED'}
+
+        hip_bone_name = hip_bone.name
+        root_bone_name = mixalot.rootBoneName.decode('UTF-8')
+        if hip_bone_name == root_bone_name:
+            self.report({'ERROR_INVALID_INPUT'}, "Error: {} is already the root bone name.".format(root_bone_name))
+            return {'CANCELLED'}
 
         conversion_iterator = mainmixalot.Convert(
             sceneObj=context.scene,
             armatureObj=context.object,
-            hipBoneName=mixalot.hipBoneName.decode('UTF-8'),
-            rootBoneName=mixalot.rootBoneName.decode('UTF-8'),
+            hipBoneName=hip_bone_name,
+            rootBoneName=root_bone_name,
             animationSampleRate=mixalot.animationFPS,
             fbxFilename=mixalot.fbxFilename.decode('UTF-8'),
             fbxOutputPath=mixalot.fbxOutputPath,
@@ -157,8 +166,6 @@ class LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot(bpy.types.Panel):
         scene = context.scene
         #UI Section
         box = layout.box()
-        row = box.row()
-        row.prop(scene.mixalot, "hipBoneName")
         row = box.row()
         row.prop(scene.mixalot, "rootBoneName")
         row = box.row()

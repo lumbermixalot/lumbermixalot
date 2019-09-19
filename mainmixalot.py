@@ -81,28 +81,32 @@ def _CheckArmatureContainsMesh(obj):
 #    is being converted then the 'Motions/' path will be appended.
 #    If False, no path is appended to @fbxOutputPath.
 def _GetOutputFilename(isActor,  fbxFilename, fbxOutputPath,
-        appendActorOrMotionPath):
+                       appendActorOrMotionPath):
     fbxFilename = "" if (fbxFilename is None) else fbxFilename.strip()
     fbxOutputPath = "" if (fbxOutputPath is None) else fbxOutputPath.strip()
 
-    if fbxFilename=="":
+    if fbxFilename == "":
         return None
     #Clean the fbxFilename.
     name, ext = os.path.splitext(fbxFilename)
     fbxFilename = "{}.fbx".format(name)
-    if fbxOutputPath=="":
+    if fbxOutputPath == "":
         fbxOutputPath = "."
     if appendActorOrMotionPath:
         if isActor:
-            fbxOutputPath = os.path.join(fbxOutputPath, "Actor")
+            dirToAppend = "Actor"
         else:
-            fbxOutputPath = os.path.join(fbxOutputPath, "Motions")
+            dirToAppend = "Motion"
+        lastDir = os.path.basename(os.path.normpath(fbxOutputPath))
+        if lastDir != dirToAppend:
+            fbxOutputPath = os.path.join(fbxOutputPath, dirToAppend)
     #Make sure the output directory exists. If not, create it.
     if not os.path.exists(fbxOutputPath):
         try:
             os.makedirs(fbxOutputPath)
         except:
-            msg = "Failed to create output dir:{}.\nWill convert without exporting.".format(fbxOutputPath)
+            msg = "Failed to create output dir:{}.\n \
+                Will convert without exporting.".format(fbxOutputPath)
             print(msg)
             return None
     return os.path.join(fbxOutputPath, fbxFilename)
