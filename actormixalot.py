@@ -23,9 +23,16 @@ SOFTWARE.
 """
 import bpy
 
-from commonmixalot import Status
-import commonmixalot as cmn
-
+#The modules of lumbermixalot
+if __package__ is None or __package__ == "":
+    # When running as a standalone script from Blender Text View "Run Script"
+    from commonmixalot import Status
+    import commonmixalot as cmn
+else:
+    print(__package__)
+    # When running as an installed AddOn, then it runs in package mode.
+    from .commonmixalot import Status
+    from . import commonmixalot as cmn
 
 #Adds the root motion bone to the Actor. The Bone will be located at
 #  world (0,0,0) pointing towards -Y.

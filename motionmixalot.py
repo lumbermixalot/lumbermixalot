@@ -28,10 +28,22 @@ import math
 import sys
 import os
 
-#The modules of lumbermixalot
-from commonmixalot import Status
-import commonmixalot as cmn
-import lowpass
+
+if __package__ is None or __package__ == "":
+    # When running as a standalone script from Blender Text View "Run Script"
+    from commonmixalot import Status
+    import commonmixalot as cmn
+    import lowpassalot
+else:
+    # When running as an installed AddOn, then it runs in package mode.
+    from .commonmixalot import Status
+    from . import commonmixalot as cmn
+    from . import lowpassalot
+
+if "bpy" in locals():
+    from importlib import reload
+    if "lowpassalot" in locals():
+        reload(lowpassalot)
 
 
 #Directory for CSV files generated if debugging is enabled.
@@ -556,7 +568,7 @@ def _ShouldExtractRootMotionForAxis(vectorList, axis, tolerance=0.01,
         cutoffFrequency = sampleRate / 10.0
     #No matter what we always calculate the low pass version of the axis data.
     npRawAxisData = _GetVectorListAxisAsNumpyArray(vectorList, axis)
-    npLowPassAxisData = lowpass.butter_lowpass_filter(npRawAxisData,
+    npLowPassAxisData = lowpassalot.butter_lowpass_filter(npRawAxisData,
                                                       cutoffFrequency,
                                                       sampleRate)
 

@@ -25,23 +25,27 @@ import bpy
 import os
 
 #The modules of lumbermixalot
-import lowpass
-import actormixalot
-import motionmixalot
-import commonmixalot
+if __package__ is None or __package__ == "":
+    # When running as a standalone script from Blender Text View "Run Script"
+    import actormixalot
+    import motionmixalot
+    import commonmixalot
+    from commonmixalot import Status
+else:
+    # When running as an installed AddOn, then it runs in package mode.
+    from . import actormixalot
+    from . import motionmixalot
+    from . import commonmixalot
+    from .commonmixalot import Status
 
 if "bpy" in locals():
     from importlib import reload
-    if "lowpass" in locals():
-        reload(lowpass)
     if "actormixalot" in locals():
         reload(actormixalot)
     if "motionmixalot" in locals():
         reload(motionmixalot)
     if "commonmixalot" in locals():
         reload(commonmixalot)
-
-from commonmixalot import Status
 
 
 #Exports the current scene with the right settings for Lumberayrd.

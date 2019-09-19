@@ -37,15 +37,17 @@ bl_info = {
 
 import bpy
 
-try:
-    from . import lumbermixalot
-except ImportError:
-    import lumbermixalot
+if __package__ is None or __package__ == "":
+    # When running as a standalone script from Blender Text View "Run Script"
+    import mainmixalot
+else:
+    # When running as an installed AddOn, then it runs in package mode.
+    from . import mainmixalot
 
 if "bpy" in locals():
     from importlib import reload
-    if "lumbermixalot" in locals():
-        reload(lumbermixalot)
+    if "mainmixalot" in locals():
+        reload(mainmixalot)
 
 
 ###############################################################################
@@ -118,7 +120,7 @@ class OBJECT_OT_convert(bpy.types.Operator):
             self.report({'ERROR_INVALID_INPUT'}, "Error: %s is not an Armature." % context.object.name)
             return{'CANCELLED'}
 
-        conversion_iterator = lumbermixalot.Convert(
+        conversion_iterator = mainmixalot.Convert(
             sceneObj=context.scene,
             armatureObj=context.object,
             hipBoneName=mixalot.hipBoneName.decode('UTF-8'),
