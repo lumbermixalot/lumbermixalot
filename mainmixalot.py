@@ -51,7 +51,7 @@ if "bpy" in locals():
 #Exports the current scene with the right settings for Lumberayrd.
 #@fbxFilePath (string) a fully qualified file path, suitable for file
 #   exporting.
-def _ExportFbx(fbxFilePath):
+def _ExportFbxInternal(fbxFilePath):
     bpy.ops.export_scene.fbx(filepath=fbxFilePath, check_existing=False, axis_forward='Y', axis_up='Z', path_mode='COPY')
     print("{} exported successfully".format(fbxFilePath))
 
@@ -65,6 +65,19 @@ def _CheckArmatureContainsMesh(obj):
         if childObj.type == 'MESH':
             return True
     return False
+
+
+# Returns a tuple (basePath, lastSubdir)
+# @fbxOutputPath (string) A directory path.
+# Example:
+# if @fbxOutputPath == "C:\\Some\\Cool\\Path"
+#   returns ("C:\\Some\\Cool", "Path")
+# if @fbxOutputPath == "C:\\Some\\Cool\\Path\\"
+#   returns ("C:\\Some\\Cool", "Path")
+def _SplitPathByLastSubDir(fbxOutputPath):
+    if fbxOutputPath[-1] == os.path.sep:
+        fbxOutputPath = fbxOutputPath[0:-1]
+    return os.path.split(fbxOutputPath)
 
 
 #Returns a fully qualified file path, suitable for file exporting.
@@ -93,12 +106,14 @@ def _GetOutputFilename(isActor,  fbxFilename, fbxOutputPath,
     if fbxOutputPath == "":
         fbxOutputPath = "."
     if appendActorOrMotionPath:
+        baseDirs, lastDir = _SplitPathByLastSubDir(fbxOutputPath)
         if isActor:
             dirToAppend = "Actor"
         else:
             dirToAppend = "Motions"
-        lastDir = os.path.basename(os.path.normpath(fbxOutputPath))
-        if lastDir != dirToAppend:
+        if (lastDir == "Actor") or (lastDir == "Motions"):
+            fbxOutputPath = os.path.join(baseDirs, dirToAppend)
+        else:
             fbxOutputPath = os.path.join(fbxOutputPath, dirToAppend)
     #Make sure the output directory exists. If not, create it.
     if not os.path.exists(fbxOutputPath):
@@ -172,7 +187,31 @@ def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
     yield Status("Completed Asset Conversion.")
 
     if outputFilename is not None:
-        _ExportFbx(outputFilename)
+        _ExportFbxInternal(outputFilename)
         yield Status("FBX Assert exported.")
 
     return 1
+
+
+def ExportFBX(armatureObj, fbxFilename, fbxOutputPath, appendActorOrMotionPath):
+    """
+    Convenience function to export the current scene as FBX per the required
+    Lumberyard configuration. 
+
+    @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
+    @fbxFilename (string). File name (no path). '.fbx' extension is optional.
+    @fbxOutputPath (string). Output directory. Only relevant if @fbxFilename
+        is valid. CAVEAT: 
+    @appendActorOrMotionPath (bool). If True, If an Actor is being converted
+        then the 'Actor/' path will be appended to @fbxOutputPath. If a Motion
+        is being converted then the 'Motions/' path will be appended.
+        If False, no path is appended to @fbxOutputPath.
+    """
+    isActor = _CheckArmatureContainsMesh(armatureObj)
+    outputFilename = _GetOutputFilename(isActor,  fbxFilename,
+                                        fbxOutputPath,
+                                        appendActorOrMotionPath)
+    if outputFilename is None:
+        raise Exception("Undefined output filename")
+    _ExportFbxInternal(outputFilename)
+    return outputFilename

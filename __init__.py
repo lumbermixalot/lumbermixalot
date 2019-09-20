@@ -150,6 +150,51 @@ class OBJECT_OT_convert(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_exportfbx(bpy.types.Operator):
+    """
+    Button/Operator for export the current scene as FBX.
+    This button is useful if the user had already converted the
+    current Actor/Motion but forgot to specify a path for exporting
+    before clicking 'Convert".
+    """
+    bl_idname = "lumbermixalot.exportfbx"
+    bl_label = "Export FBX"
+    description = "Export current scene as FBX."
+
+    def execute(self, context):
+        mixalot = context.scene.mixalot
+        if context.object == None:
+            self.report({'ERROR_INVALID_INPUT'}, "Error: no object selected. Please select the Armature object.")
+            return {'CANCELLED'}
+
+        if context.object.type != 'ARMATURE':
+            self.report({'ERROR_INVALID_INPUT'}, "Error: {} is not an Armature.".format(context.object.name))
+            return {'CANCELLED'}
+
+        root_bone = commonmixalot.GetRootBone(context.object)
+        if root_bone is None:
+            self.report({'ERROR'}, "Error: The Armature must have at least one bone.")
+            return {'CANCELLED'}
+
+        current_root_bone_name = root_bone.name
+        root_bone_name = mixalot.rootBoneName.decode('UTF-8')
+        if current_root_bone_name != root_bone_name:
+            self.report({'ERROR_INVALID_INPUT'}, "Error: It seems the asset has not been converted by Lumbermixalot.")
+            return {'CANCELLED'}
+
+        try:
+            out_filename = mainmixalot.ExportFBX(
+                armatureObj=context.object,
+                fbxFilename=mixalot.fbxFilename.decode('UTF-8'),
+                fbxOutputPath=mixalot.fbxOutputPath,
+                appendActorOrMotionPath=mixalot.appendAssetTypeToPath)
+        except Exception as e:
+            self.report({'ERROR'}, 'Error: ' + str(e))
+            return{'CANCELLED'}
+        self.report({'INFO'}, "Asset exported as '{}'".format(out_filename))
+        return {'FINISHED'}
+
+
 ###############################################################################
 # UI
 ###############################################################################
@@ -189,6 +234,10 @@ class LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot(bpy.types.Panel):
         row = box.row()
         row.scale_y = 2.0
         row.operator("lumbermixalot.convert")
+        
+        box = layout.box()
+        row = box.row()
+        row.operator("lumbermixalot.exportfbx")
 
 
 ###############################################################################
@@ -197,20 +246,21 @@ class LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot(bpy.types.Panel):
 classes = (
     LumbermixalotPropertyGroup,
     OBJECT_OT_convert,
+    OBJECT_OT_exportfbx,
     LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot
 )
 
 
 def register():
-    for aclass in classes:
-        bpy.utils.register_class(aclass)
+    for class_ in classes:
+        bpy.utils.register_class(class_)
     bpy.types.Scene.mixalot = bpy.props.PointerProperty(
         type=LumbermixalotPropertyGroup)
 
 
 def unregister():
-    for aclass in classes:
-        bpy.utils.unregister_class(aclass)
+    for class_ in classes:
+        bpy.utils.unregister_class(class_)
     del bpy.types.Scene.mixalot
 
 if __name__ == "__main__":
