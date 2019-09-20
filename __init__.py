@@ -72,6 +72,43 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
         name="animation FPS",
         description="Should the Frames Per Second the animation was designed for.",
         default = '60')
+
+    extractTranslationX: bpy.props.BoolProperty(
+        name="X",
+        description="Extract X Axis Translation.",
+        default = True)
+    zeroOutTranslationX: bpy.props.BoolProperty(
+        name="Zero Out",
+        description="Zero Out X Axis Translation upon extraction.",
+        default = False)
+
+    extractTranslationY: bpy.props.BoolProperty(
+        name="Y",
+        description="Extract Y Axis Translation.",
+        default = True)
+    zeroOutTranslationY: bpy.props.BoolProperty(
+        name="Zero Out",
+        description="Zero Out Y Axis Translation upon extraction.",
+        default = False)
+
+    extractTranslationZ: bpy.props.BoolProperty(
+        name="Z",
+        description="Extract Z Axis Translation.",
+        default = True)
+    zeroOutTranslationZ: bpy.props.BoolProperty(
+        name="Zero Out",
+        description="Zero Out Z Axis Translation upon extraction.",
+        default = False)
+
+    extractRotationZ: bpy.props.BoolProperty(
+        name="Z Axis",
+        description="Extract Rotation around Z Axis.",
+        default = True)
+    zeroOutRotationZ: bpy.props.BoolProperty(
+        name="Zero Out",
+        description="Zero Out Rotation around Z Axis upon extraction.",
+        default = False)
+
     fbxFilename: bpy.props.StringProperty(
         name="Fbx name",
         description="Optional. Name of the output fbx (no path). Leave it"
@@ -215,6 +252,31 @@ class LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot(bpy.types.Panel):
         row.prop(scene.mixalot, "rootBoneName")
         row = box.row()
         row.prop(scene.mixalot, "animationFPS")
+
+        box = layout.box()
+        box.label(text="Motion Extraction Options")
+        
+        transBox = box.box()
+        transBox.label(text="Translation")
+        row = transBox.row()
+        row.prop(scene.mixalot, "extractTranslationX")
+        if scene.mixalot.extractTranslationX:
+            row.prop(scene.mixalot, "zeroOutTranslationX")
+        row = transBox.row()
+        row.prop(scene.mixalot, "extractTranslationY")
+        if scene.mixalot.extractTranslationY:
+            row.prop(scene.mixalot, "zeroOutTranslationY")
+        row = transBox.row()
+        row.prop(scene.mixalot, "extractTranslationZ")
+        if scene.mixalot.extractTranslationZ:
+            row.prop(scene.mixalot, "zeroOutTranslationZ")
+
+        transBox = box.box()
+        transBox.label(text="Rotation Around")
+        row = transBox.row()
+        row.prop(scene.mixalot, "extractRotationZ")
+        if scene.mixalot.extractRotationZ:
+            row.prop(scene.mixalot, "zeroOutRotationZ")
 
         box = layout.box()
         box.label(text="FBX Export Options")
