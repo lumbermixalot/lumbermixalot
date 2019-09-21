@@ -128,8 +128,13 @@ def _GetOutputFilename(isActor,  fbxFilename, fbxOutputPath,
     
 
 def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
-            animationSampleRate=60.0, fbxFilename="", fbxOutputPath="",
-            appendActorOrMotionPath=True, dumpCSVs=False):
+            extractTranslationX=True, zeroOutTranslationX=False,
+            extractTranslationY=True, zeroOutTranslationY=False,
+            extractTranslationZ=True, zeroOutTranslationZ=False,
+            extractRotationZ=False, zeroOutRotationZ=False,
+            fbxFilename="", fbxOutputPath="",
+            appendActorOrMotionPath=True,
+            dumpCSVs=False):
     """
     Main function to bake hipmotion to RootMotion in Mixamo Rigs.
     If this function finds at least one 'MESH' type of child object, then
@@ -143,9 +148,11 @@ def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
         If Empty or None, the value will be assumed to tbe "Hips".
     @rootBoneName (string). Name of the root motion bone that will be added to
         the armature. If Empty or None, the value will be assumed to be "root".
-    @animationSampleRate (double) A value in Hz that represents the target
-        Frames Per Second at which the animation is supposed to run. It is
-        usually 60fps or 30fps.
+    @extractTranslationX,Y,Z (bool). Extract X,Y,Z Axis Translation.
+    @zeroOutTranslationX,Y,Z (bool). Zero Out X,Y,Z Axis Translation upon
+        extraction.
+    @extractRotationZ (bool). Extract Rotation around Z Axis.
+    @zeroOutRotationZ (bool). Zero Out Rotation around Z Axis upon extraction.
     @fbxFilename (string). File name (no path). '.fbx' extension is optional.
         If Empty or None, automatic FBX exporting won't be done upon
         conversion.
@@ -179,7 +186,11 @@ def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
         conversion_iterator = actormixalot.ProcessActor(armatureObj, rootBoneName)
     else:
         conversion_iterator = motionmixalot.ProcessMotion(sceneObj, armatureObj,
-            hipBoneName, rootBoneName, animationSampleRate, dumpCSVs)
+            hipBoneName, rootBoneName,
+            extractTranslationX, zeroOutTranslationX,
+            extractTranslationY, zeroOutTranslationY,
+            extractTranslationZ, zeroOutTranslationZ,
+            extractRotationZ, zeroOutRotationZ, dumpCSVs)
 
     for status in conversion_iterator:
         yield Status(str(status))

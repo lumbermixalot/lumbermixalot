@@ -65,13 +65,6 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
         maxlen = 256,
         default = "root",
         subtype='BYTE_STRING')
-    animationFPS:  bpy.props.EnumProperty(items=
-        [('24', '24fps', ''),
-         ('30', '30fps', ''),
-         ('60', '60fps', ''),],
-        name="animation FPS",
-        description="Should the Frames Per Second the animation was designed for.",
-        default = '60')
 
     extractTranslationX: bpy.props.BoolProperty(
         name="X",
@@ -103,7 +96,7 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
     extractRotationZ: bpy.props.BoolProperty(
         name="Z Axis",
         description="Extract Rotation around Z Axis.",
-        default = True)
+        default = False)
     zeroOutRotationZ: bpy.props.BoolProperty(
         name="Zero Out",
         description="Zero Out Rotation around Z Axis upon extraction.",
@@ -171,7 +164,10 @@ class OBJECT_OT_convert(bpy.types.Operator):
             armatureObj=context.object,
             hipBoneName=hip_bone_name,
             rootBoneName=root_bone_name,
-            animationSampleRate=mixalot.animationFPS,
+            extractTranslationX=mixalot.extractTranslationX, zeroOutTranslationX=mixalot.zeroOutTranslationX,
+            extractTranslationY=mixalot.extractTranslationY, zeroOutTranslationY=mixalot.zeroOutTranslationY,
+            extractTranslationZ=mixalot.extractTranslationZ, zeroOutTranslationZ=mixalot.zeroOutTranslationZ,
+            extractRotationZ=mixalot.extractRotationZ, zeroOutRotationZ=mixalot.zeroOutRotationZ,
             fbxFilename=mixalot.fbxFilename.decode('UTF-8'),
             fbxOutputPath=mixalot.fbxOutputPath,
             appendActorOrMotionPath=mixalot.appendAssetTypeToPath,
@@ -250,8 +246,6 @@ class LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot(bpy.types.Panel):
         box = layout.box()
         row = box.row()
         row.prop(scene.mixalot, "rootBoneName")
-        row = box.row()
-        row.prop(scene.mixalot, "animationFPS")
 
         box = layout.box()
         box.label(text="Motion Extraction Options")

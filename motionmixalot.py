@@ -23,7 +23,6 @@ SOFTWARE.
 """
 import bpy
 from mathutils import *
-import numpy as np
 import math
 import sys
 import os
@@ -33,18 +32,10 @@ if __package__ is None or __package__ == "":
     # When running as a standalone script from Blender Text View "Run Script"
     from commonmixalot import Status
     import commonmixalot as cmn
-    import lowpassalot
 else:
     # When running as an installed AddOn, then it runs in package mode.
     from .commonmixalot import Status
     from . import commonmixalot as cmn
-    from . import lowpassalot
-
-if "bpy" in locals():
-    from importlib import reload
-    if "lowpassalot" in locals():
-        reload(lowpassalot)
-
 
 #Directory for CSV files generated if debugging is enabled.
 #Customize to your needs.
@@ -506,85 +497,11 @@ def _SaveQuaternionListAsCsv(quaternionsList, startFrame, fileName):
     print("{} was created".format(fileName))
 
 
-def _GetVectorListAxisAsNumpyArray(vectorList, axis):
+def _GetVectorListAxisAsArray(vectorList, axis):
     pyArray = []
     for v in vectorList:
         pyArray.append(v[axis])
-    return np.array(pyArray)
-
-
-#If the last value of the array for a given axis
-#is distant by at least @tolerance, then we consider
-#the axis to have translation
-def _AxisFinalPosHasTranslation(vectorList, axis, tolerance):
-    lastVector = vectorList[-1]
-    lastAxisValue = lastVector[axis]
-    print(lastAxisValue)
-    return math.fabs(lastAxisValue) > tolerance
-
-
-#Returns tuple (cnt, aMin, aMax, aAvg, aStdev)
-def _CalcNumpyArrayRunningStats(npArray):
-    Svar = 0.0
-    cnt = 0
-    for v in npArray:
-        cnt += 1
-        sample = v
-        if cnt == 1:
-            aMin = aMax = aAvg = sample
-            cnt += 1
-            continue
-        if sample < aMin:
-            aMin = sample
-        elif sample > aMax:
-            aMax = sample
-        prevAvg = aAvg
-        aAvg = aAvg + (sample - aAvg)/cnt
-        Svar = Svar + (sample - prevAvg)*(sample - aAvg)
-    # For variance we are using Svar/cnt insteead of Svar/(cnt-1) because
-    # we are analyzing the whole data set, not a sample of a larger set.
-    variance = Svar/cnt if (cnt > 0) else 0.0
-    aStdev = math.sqrt(variance)
-    return (cnt, aMin, aMax, aAvg, aStdev)
-
-
-#return tuple (bool, npRawAxisData, npLowPassAxisData)
-#   The first item in the tuple is True if the data for a given axis of the
-#   vectorList suggests that there's a change of distance large enough
-#   that makes it important to extract it as part of the root motion.
-#   npRawAxisData is a numpy array that contains the raw data from
-#       @vectorList for a given axis.
-#   npLowPassAxisData is a numpy array that contains the low frequency data
-#       from @vectorList for a given axis. In other words:
-#       npRawAxisData - npLowPassAxisData = High Frequency data.
-#@vectorList (list of Vector)
-#@axis (int) Index of axis to analyze. 0 for X, 1 for Y, 2 for Z.
-#@tolerance (double)
-#@sampleRate How fast 
-def _ShouldExtractRootMotionForAxis(vectorList, axis, tolerance=0.01,
-                                   sampleRate = 60.0,
-                                   cutoffFrequency = None):
-    if cutoffFrequency is None:
-        cutoffFrequency = sampleRate / 10.0
-    #No matter what we always calculate the low pass version of the axis data.
-    npRawAxisData = _GetVectorListAxisAsNumpyArray(vectorList, axis)
-    npLowPassAxisData = lowpassalot.butter_lowpass_filter(npRawAxisData,
-                                                      cutoffFrequency,
-                                                      sampleRate)
-
-    #See if there's considerable translation across the axis.
-    if _AxisFinalPosHasTranslation(vectorList, axis, tolerance):
-        return True, npRawAxisData, npLowPassAxisData
-
-    #Ok, so the final value at the given axis is close to zero.
-    #But, is there considerable translation before arriving at the final value?
-    #If the low pass data "max" value
-    (cnt, aMin, aMax, aAvg, aStdev) = _CalcNumpyArrayRunningStats(npLowPassAxisData)
-    print("low pass stats: ", cnt, aMin, aMax, aAvg, aStdev)
-    if aMax > 0.2: #Define this as configurable.
-        return True, npRawAxisData, npLowPassAxisData
-
-    return False, npRawAxisData, npLowPassAxisData
+    return pyArray
 
 
 #locationData is a list of Vector.
@@ -637,14 +554,13 @@ def _ClearCloseToZeroDataFromArrayInPlace(arr, tolerance = 0.1):
         arr[idx] = 0.0
 
 
-def _BuildVectorListFromNumpyArrays(npLowPassAxisDataX,
-                                   npLowPassAxisDataY,
-                                   npLowPassAxisDataZ):
-    cnt = len(npLowPassAxisDataX)
+#Returns a list of Vector
+def _BuildVectorListFromArrays(arrayDataX, arrayDataY, arrayDataZ):
+    cnt = len(arrayDataX)
     retList = []
     for idx in range(cnt):
-        v = Vector((npLowPassAxisDataX[idx], npLowPassAxisDataY[idx],
-                   npLowPassAxisDataZ[idx]))
+        v = Vector((arrayDataX[idx], arrayDataY[idx],
+                   arrayDataZ[idx]))
         retList.append(v)
     return retList
 
@@ -684,7 +600,11 @@ def _ClearDataForAxes(vectorList, clearX, clearY, clearZ):
 
 
 def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
-                  animationSampleRate, dumpCSVs=False):
+                  extractTranslationX, zeroOutTranslationX,
+                  extractTranslationY, zeroOutTranslationY,
+                  extractTranslationZ, zeroOutTranslationZ,
+                  extractRotationZ, zeroOutRotationZ,
+                  dumpCSVs=False):
     """
     Main function that transforms a Motion type of Asset per Lumberyard 
     requirements.
@@ -698,10 +618,11 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
     @hipBoneName (string). Name of the "Hips" bone as originated by Mixamo.
     @rootBoneName (string). Name of the root motion bone that will be added to
         the armature.
-    @animationSampleRate (double) A value in Hz that represents the target
-        Frames Per Second at which the animation is supposed to run. It is
-        usually 60fps or 30fps. It is used to calculate the low pass motion
-        data.
+    @extractTranslationX,Y,Z (bool). Extract X,Y,Z Axis Translation.
+    @zeroOutTranslationX,Y,Z (bool). Zero Out X,Y,Z Axis Translation upon
+        extraction.
+    @extractRotationZ (bool). Extract Rotation around Z Axis.
+    @zeroOutRotationZ (bool). Zero Out Rotation around Z Axis upon extraction.
     @dumpCSVs (bool) DEBUG Only. Dump motion vector data as CSV files
     """
     #The first goal is to apply the object rotation if it is not 0,0,0.
@@ -716,31 +637,32 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
         _SaveVectorListAsCsv(hipWorldLocations, 0,
             "HipWorldLocations.csv")
 
-    (localQuaternionsList, transformMatrix, worldQuaternionsList,
-        worldEulersList) = _GetBoneRotations(armatureObj, hipBoneName)
-    yield Status("Got '{}' bone local and world rotations".format(hipBoneName))
-    if dumpCSVs:
-        hipWorldVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersList)
-        _SaveVectorListAsCsv(hipWorldVectorDegreesList, 0,
-                "hipWorldVectorDegreesList.csv")
-    
-    worldEulersListNoZ, worldEulersListOnlyZ = _SplitEulersListByZ(worldEulersList)
-    yield Status("Splitted '{}' bone world Euler rotations".format(hipBoneName))
-    if dumpCSVs:
-        hipWorldNoZVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersListNoZ)
-        _SaveVectorListAsCsv(hipWorldNoZVectorDegreesList, 0,
-                "hipWorldNoZVectorDegreesList.csv")
-        hipWorldOnlyZVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersListOnlyZ)
-        _SaveVectorListAsCsv(hipWorldOnlyZVectorDegreesList, 0,
-                "hipWorldOnlyZVectorDegreesList.csv")
+    if extractRotationZ:
+        (localQuaternionsList, transformMatrix, worldQuaternionsList,
+            worldEulersList) = _GetBoneRotations(armatureObj, hipBoneName)
+        yield Status("Got '{}' bone local and world rotations".format(hipBoneName))
+        if dumpCSVs:
+            hipWorldVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersList)
+            _SaveVectorListAsCsv(hipWorldVectorDegreesList, 0,
+                    "hipWorldVectorDegreesList.csv")
 
-    hipsLocalQuaternionsListNoZ = _TransformEulersList(worldEulersListNoZ, transformMatrix.inverted())
-    yield Status("Transformed '{}' bone world No-Z Euler rotations to local Quaternions".format(hipBoneName))
-    if dumpCSVs:
-        #The idea is that copyLocalQuaternionsList should be identical to hipsLocalQuaternionsListNoZ
-        copyLocalQuaternionsList = _TransformEulersList(worldEulersList, transformMatrix.inverted())
-        _SaveQuaternionListAsCsv(copyLocalQuaternionsList, 0, "copyLocalQuaternionsList.csv")
-        _SaveQuaternionListAsCsv(hipsLocalQuaternionsListNoZ, 0, "hipsLocalQuaternionsListNoZ.csv")
+        worldEulersListNoZ, worldEulersListOnlyZ = _SplitEulersListByZ(worldEulersList)
+        yield Status("Splitted '{}' bone world Euler rotations".format(hipBoneName))
+        if dumpCSVs:
+            hipWorldNoZVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersListNoZ)
+            _SaveVectorListAsCsv(hipWorldNoZVectorDegreesList, 0,
+                    "hipWorldNoZVectorDegreesList.csv")
+            hipWorldOnlyZVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersListOnlyZ)
+            _SaveVectorListAsCsv(hipWorldOnlyZVectorDegreesList, 0,
+                    "hipWorldOnlyZVectorDegreesList.csv")
+
+        hipsLocalQuaternionsListNoZ = _TransformEulersList(worldEulersListNoZ, transformMatrix.inverted())
+        yield Status("Transformed '{}' bone world No-Z Euler rotations to local Quaternions".format(hipBoneName))
+        if dumpCSVs:
+            #The idea is that copyLocalQuaternionsList should be identical to hipsLocalQuaternionsListNoZ
+            copyLocalQuaternionsList = _TransformEulersList(worldEulersList, transformMatrix.inverted())
+            _SaveQuaternionListAsCsv(copyLocalQuaternionsList, 0, "copyLocalQuaternionsList.csv")
+            _SaveQuaternionListAsCsv(hipsLocalQuaternionsListNoZ, 0, "hipsLocalQuaternionsListNoZ.csv")
 
     
     #startTimeNS = time.perf_counter_ns()
@@ -761,74 +683,93 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
     if dumpCSVs:
         _SaveVectorListAsCsv(bboxBaseLocations, keyFrameStart, "BBoxWorldLocations.csv")
 
-    (extractX, npRawAxisDataX, npLowPassAxisDataX) = _ShouldExtractRootMotionForAxis(hipWorldLocations, 0)
-    (extractY, npRawAxisDataY, npLowPassAxisDataY) = _ShouldExtractRootMotionForAxis(hipWorldLocations, 1)
-    (extractZ, npRawAxisDataZ, npLowPassAxisDataZ) = _ShouldExtractRootMotionForAxis(bboxBaseLocations, 2)
-    yield Status("extracted low pass motion from locations of '{}' bone".format(hipBoneName))
-
-    #sceneObj.frame_set(keyFrameStart)
+    rawHipWorldAxisDataX = _GetVectorListAxisAsArray(hipWorldLocations, 0)
+    rawHipWorldAxisDataY = _GetVectorListAxisAsArray(hipWorldLocations, 1)
+    rawHipWorldAxisDataZ = _GetVectorListAxisAsArray(hipWorldLocations, 2)
+    rawFeetWorldAxisDataZ = _GetVectorListAxisAsArray(bboxBaseLocations, 2)
+    yield Status("extracted world location axis arrays from '{}' bone".format(hipBoneName))
 
     _AddSiblingRootBone(armatureObj, rootBoneName)
 
-    if extractX or extractY or extractZ:
-        _ClearCloseToZeroDataFromArrayInPlace(npLowPassAxisDataZ)
-        yield Status("Cleared close to 0.0 low pass Z values")
-        lowPassHipWorldLocations = _BuildVectorListFromNumpyArrays(
-            npLowPassAxisDataX, npLowPassAxisDataY, npLowPassAxisDataZ)
-        yield Status("Built Low Pass '{}' bone world locations list".format(hipBoneName))
+    if extractTranslationX or extractTranslationY or extractTranslationZ:
+        _ClearCloseToZeroDataFromArrayInPlace(rawFeetWorldAxisDataZ)
+        yield Status("Cleared close to 0.0 feet world Z values")
+
+        feetWorldLocations = _BuildVectorListFromArrays(
+            rawHipWorldAxisDataX, rawHipWorldAxisDataY, rawFeetWorldAxisDataZ)
+        yield Status("Built feet world locations list from '{}' bone".format(hipBoneName))
         if dumpCSVs:
-            _SaveVectorListAsCsv(lowPassHipWorldLocations, keyFrameStart,
-                "lowPassHipWorldLocations_beforeClear.csv")
+            _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
+                "feetWorldLocations_beforeClear.csv")
 
         #Make sure the root bone has all the required keyframes allocated.
         _InsertLocationKeyframes(armatureObj, rootBoneName, hipBoneName)
         yield Status("Inserted empty location KeyFrames in '{}' bone".format(rootBoneName))
 
-        #Let's clear the low pass data for the axis that won't require root motion extraction
-        _ClearDataForAxes(lowPassHipWorldLocations, not extractX, not extractY, not extractZ)
-        yield Status("Cleared low pass motion data for the following axes X({}), Y({}), Z({})".format(not extractX, not extractY, not extractZ))
+        #Let's clear the feet world locations data for the axis that won't require root motion extraction
+        _ClearDataForAxes(feetWorldLocations, not extractTranslationX,
+                          not extractTranslationY, not extractTranslationZ)
+        yield Status("Cleared motion data for the following axes X({}), Y({}), Z({})".format(
+            not extractTranslationX, not extractTranslationY, not extractTranslationZ))
         if dumpCSVs:
-            _SaveVectorListAsCsv(lowPassHipWorldLocations, keyFrameStart,
-                "lowPassHipWorldLocations_afterClear.csv")
+            _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
+                "feetWorldLocations_afterClear.csv")
 
-        #Subtract low pass data from Hips Bone
-        lowPassHiplocalLocations = _TransformVectorList(lowPassHipWorldLocations,
-                                                       hipWorldMatrix.inverted())
-        yield Status("Got low pass '{}' bone local locations from world locations".format(hipBoneName))
-        _SubtractLocationDataFromBoneFCurves(hipBoneName, lowPassHiplocalLocations)
-        yield Status("Removed low pass motion data '{}' bone locations FCurve".format(hipBoneName))
+        #Get the feetWorldLocations transformed in hips local space. The resulting
+        #vectors will be deltas that will be subtracted from the hip local locations.
+        deltaHipLocalLocations = _TransformVectorList(feetWorldLocations,
+                                                    hipWorldMatrix.inverted())
+        yield Status("Got '{}' bone local locations from feet world locations".format(hipBoneName))
+        #Subtract from hip the motions that will be transferred to the root.
+        _SubtractLocationDataFromBoneFCurves(hipBoneName, deltaHipLocalLocations)
+        yield Status("Removed motion data from '{}' bone locations FCurve".format(hipBoneName))
+        
         if dumpCSVs:
-            _SaveVectorListAsCsv(lowPassHiplocalLocations, keyFrameStart,
-                "lowPassHiplocalLocations.csv")
+            _SaveVectorListAsCsv(deltaHipLocalLocations, keyFrameStart,
+                "deltaHipLocalLocations.csv")
 
-        #Set low pass data to Root Bone
-        lowPassRootlocalLocations = _GetBoneLocalLocationsFromWorldLocations(
-            lowPassHipWorldLocations, armatureObj.pose.bones[rootBoneName], armatureObj.matrix_world)
-        yield Status("Got lowpass local locations for '{}' bone".format(rootBoneName))
-        _SetLocationDataForBoneFCurves(rootBoneName, lowPassRootlocalLocations)
+        if zeroOutTranslationX or zeroOutTranslationY or zeroOutTranslationZ:
+            _ClearDataForAxes(feetWorldLocations, zeroOutTranslationX,
+                              zeroOutTranslationY, zeroOutTranslationZ)
+            yield Status("zeroed Out motion data for the following axes X({}), Y({}), Z({})".format(
+            zeroOutTranslationX, zeroOutTranslationY, zeroOutTranslationZ))
+            if dumpCSVs:
+                _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
+                "feetWorldLocations_afterZeroedOut.csv")
+
+        rootBoneLocalLocations = _GetBoneLocalLocationsFromWorldLocations(
+            feetWorldLocations, armatureObj.pose.bones[rootBoneName], armatureObj.matrix_world)
+        yield Status("Got local locations for '{}' bone".format(rootBoneName))
+
+        _SetLocationDataForBoneFCurves(rootBoneName, rootBoneLocalLocations)
         yield Status("Set location root motion to '{}' bone locations FCurve".format(rootBoneName))
         if dumpCSVs:
-            _SaveVectorListAsCsv(lowPassRootlocalLocations, keyFrameStart,
-                "lowPassRootlocalLocations.csv")
+            _SaveVectorListAsCsv(rootBoneLocalLocations, keyFrameStart,
+                "rootBoneLocalLocations.csv")
 
-    #Apply rotation around Z axis.
-    _InsertRotationKeyframes(armatureObj, rootBoneName, hipBoneName)
-    yield Status("Inserted empty rotation keyframes in '{}' bone quaternions FCurve".format(rootBoneName))
+    if extractRotationZ:
+        #Apply rotation around Z axis.
+        _InsertRotationKeyframes(armatureObj, rootBoneName, hipBoneName)
+        yield Status("Inserted empty rotation keyframes in '{}' bone quaternions FCurve".format(rootBoneName))
 
-    #Update Hips rotations with noZ rotation.
-    _SetRotationDataForBoneFCurves(hipBoneName, hipsLocalQuaternionsListNoZ)
-    yield Status("Remove Z axis rotation from '{}' bone quaternions FCurve".format(hipBoneName))
+        #Update Hips rotations with noZ rotation.
+        _SetRotationDataForBoneFCurves(hipBoneName, hipsLocalQuaternionsListNoZ)
+        yield Status("Remove Z axis rotation from '{}' bone quaternions FCurve".format(hipBoneName))
 
-    #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
-    boneWorldMatrix = _GetBoneWorldMatrix(armatureObj, rootBoneName)
-    worldEulersListOnlyZ = _AddEulerToList(worldEulersListOnlyZ, Euler((0.0, 0.0, math.radians(180.0)), 'XYZ'))
-    yield Status("Applied 180 degrees offset to Z axis rotations of '{}' bone".format(rootBoneName))
+        if zeroOutRotationZ:
+            _ClearDataForAxes(worldEulersListOnlyZ, clearX=False, clearY=False, clearZ=True)
 
-    rootLocalQuaternionsListOnlyZ = _TransformEulersList(worldEulersListOnlyZ, boneWorldMatrix.inverted())
-    yield Status("Transformed '{}' bone world Eulers to local Quaternion".format(rootBoneName))
+        #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
+        boneWorldMatrix = _GetBoneWorldMatrix(armatureObj, rootBoneName)
 
-    _SetRotationDataForBoneFCurves(rootBoneName, rootLocalQuaternionsListOnlyZ)
-    yield Status("Applied root motion Z rotation to '{}' bone quaternion FCurves".format(rootBoneName))
+        worldEulersListOnlyZ = _AddEulerToList(worldEulersListOnlyZ, Euler((0.0, 0.0, math.radians(180.0)), 'XYZ'))
+        yield Status("Applied 180 degrees offset to Z axis rotations of '{}' bone".format(rootBoneName))
+
+        rootLocalQuaternionsListOnlyZ = _TransformEulersList(worldEulersListOnlyZ, boneWorldMatrix.inverted())
+        yield Status("Transformed '{}' bone world Eulers to local Quaternion".format(rootBoneName))
+
+        _SetRotationDataForBoneFCurves(rootBoneName, rootLocalQuaternionsListOnlyZ)
+        yield Status("Applied root motion Z rotation to '{}' bone quaternion FCurves".format(rootBoneName))
 
     #Finally make "root" the father of "Hips".
     _MakeParentBone(armatureObj, parentBoneName=rootBoneName, childBoneName=hipBoneName)
