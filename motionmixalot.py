@@ -300,6 +300,14 @@ def _GetEulerListFromQuaternionsList(localQuaternionsList):
         retList.append(e)
     return retList
 
+#Returns a list of Matrix33
+def _GetMatrix33ListFromQuaternionsList(localQuaternionsList):
+    retList = []
+    for q in localQuaternionsList:
+        m33 = q.to_matrix()
+        retList.append(m33)
+    return retList
+
 
 #@vectorList is a list of MathUtils.Vector
 #@matrix is a MathUtils.Matrix
@@ -320,6 +328,14 @@ def _TransformEulersList(eulersList, matrix):
         newRotMatix = matrix @ mat44
         q = newRotMatix.to_quaternion()
         retList.append(q)
+    return retList
+
+def _TransformMatrix33List(matrix33List, matrix):
+    retList = []
+    matrix33 = matrix.to_3x3()
+    for m33 in matrix33List:
+        newRotMatix = matrix33 @ m33
+        retList.append(newRotMatix)
     return retList
 
 
@@ -400,7 +416,7 @@ def _TransformQuaternionListByDefaultBoneWorldMatrix(obj, quaternionsList):
 
 
 #Returns a tuple (localQuaternionsList, transformMatrix, worldQuaternionsList,
-#                 worldEulersList)
+#                 worldEulersList, worldMatrix33List)
 #   Where:
 #   localQuaternionsList is a list of Quaternion with local bone data as
 #       extracted from FCurves.
@@ -419,7 +435,8 @@ def _GetBoneRotations(obj, boneName):
     transformMatrix, worldQuaternionsList = _TransformQuaternionListByDefaultBoneWorldMatrix(obj, localQuaternionsList)
     #localEulerLists = _GetEulerListFromQuaternionsList(localQuaternionsList)
     worldEulersList = _GetEulerListFromQuaternionsList(worldQuaternionsList)
-    return (localQuaternionsList, transformMatrix, worldQuaternionsList, worldEulersList)
+    worldMatrix33List = _GetMatrix33ListFromQuaternionsList(worldQuaternionsList)
+    return (localQuaternionsList, transformMatrix, worldQuaternionsList, worldEulersList, worldMatrix33List)
 
 
 #Returns a list of Vectors
@@ -429,6 +446,21 @@ def _GetEulerListAsVectorDegreeList(eulerList):
         v = Vector((math.degrees(e.x), math.degrees(e.y), math.degrees(e.z)))
         retList.append(v)
     return retList
+
+
+#returns tuple basisXList, basisYList, basisZList
+def _GetBasisListFromMatrixList(hipWorldMatrix33List):
+    basisXList = []
+    basisYList = []
+    basisZList = []
+    for m33 in hipWorldMatrix33List:
+        basisX = m33.col[0]
+        basisY = m33.col[1]
+        basisZ = m33.col[2]
+        basisXList.append(basisX)
+        basisYList.append(basisY)
+        basisZList.append(basisZ)
+    return basisXList, basisYList, basisZList
 
 
 #Returns a tuple (eulersListNoZ, eulersListOnlyZ)
@@ -598,7 +630,6 @@ def _ClearDataForAxes(vectorList, clearX, clearY, clearZ):
             v.z = 0.0        
 
 
-
 def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
                   extractTranslationX, zeroOutTranslationX,
                   extractTranslationY, zeroOutTranslationY,
@@ -639,12 +670,21 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
 
     if extractRotationZ:
         (localQuaternionsList, transformMatrix, worldQuaternionsList,
-            worldEulersList) = _GetBoneRotations(armatureObj, hipBoneName)
+            worldEulersList, hipWorldMatrix33List) = _GetBoneRotations(armatureObj, hipBoneName)
         yield Status("Got '{}' bone local and world rotations".format(hipBoneName))
         if dumpCSVs:
+            _SaveQuaternionListAsCsv(localQuaternionsList, 0, "hipLocalQuaternionsList.csv")
+            _SaveQuaternionListAsCsv(worldQuaternionsList, 0, "hipWorldQuaternionsList.csv")
             hipWorldVectorDegreesList = _GetEulerListAsVectorDegreeList(worldEulersList)
             _SaveVectorListAsCsv(hipWorldVectorDegreesList, 0,
                     "hipWorldVectorDegreesList.csv")
+            hipWorldBasisXList, hipWorldBasisYList, hipWorldBasisZList = _GetBasisListFromMatrixList(hipWorldMatrix33List)
+            _SaveVectorListAsCsv(hipWorldBasisXList, 0,
+                    "hipWorldBasisXList.csv")
+            _SaveVectorListAsCsv(hipWorldBasisYList, 0,
+                    "hipWorldBasisYList.csv")
+            _SaveVectorListAsCsv(hipWorldBasisZList, 0,
+                    "hipWorldBasisZList.csv")
 
         worldEulersListNoZ, worldEulersListOnlyZ = _SplitEulersListByZ(worldEulersList)
         yield Status("Splitted '{}' bone world Euler rotations".format(hipBoneName))
@@ -761,6 +801,17 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
 
         #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
         boneWorldMatrix = _GetBoneWorldMatrix(armatureObj, rootBoneName)
+
+        if dumpCSVs:
+            rootBoneLocalMatrix33List = _TransformMatrix33List(hipWorldMatrix33List, boneWorldMatrix.inverted())
+            rootLocalBasisXList, rootLocalBasisYList, rootLocalBasisZList = _GetBasisListFromMatrixList(rootBoneLocalMatrix33List)
+            _SaveVectorListAsCsv(rootLocalBasisXList, 0,
+                    "rootLocalBasisXList.csv")
+            _SaveVectorListAsCsv(rootLocalBasisYList, 0,
+                    "rootLocalBasisYList.csv")
+            _SaveVectorListAsCsv(rootLocalBasisZList, 0,
+                    "rootLocalBasisZList.csv")
+
 
         worldEulersListOnlyZ = _AddEulerToList(worldEulersListOnlyZ, Euler((0.0, 0.0, math.radians(180.0)), 'XYZ'))
         yield Status("Applied 180 degrees offset to Z axis rotations of '{}' bone".format(rootBoneName))
