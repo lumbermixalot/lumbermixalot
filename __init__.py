@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Mixamo Rig Converter for Lumberyard",
     "author": "Galib F. Arrieta",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to bake Root motion for Mixamo Animations"),
@@ -136,7 +136,7 @@ class OBJECT_OT_convert(bpy.types.Operator):
     """Button/Operator for converting Actor or Motion"""
     bl_idname = "lumbermixalot.convert"
     bl_label = "Convert"
-    description = "Bakes root motion bone for a single, already imported rig."
+    bl_description = "Bakes root motion bone for a single, already imported rig."
 
     def execute(self, context):
         mixalot = context.scene.mixalot
@@ -192,7 +192,7 @@ class OBJECT_OT_exportfbx(bpy.types.Operator):
     """
     bl_idname = "lumbermixalot.exportfbx"
     bl_label = "Export FBX"
-    description = "Export current scene as FBX."
+    bl_description = "Export current scene as FBX."
 
     def execute(self, context):
         mixalot = context.scene.mixalot
