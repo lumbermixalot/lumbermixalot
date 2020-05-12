@@ -4,6 +4,9 @@ Blender 2.80 Add-On to make Mixamo Rigs (Characters and Animations) compatible w
 CAVEAT: 
 1. Not tested with older versions of Blender.
 
+# YouTube Tutorial
+https://www.youtube.com/playlist?list=PL80dW98K-QMcC-i0OHk0ZjSCS88wscRHc
+
 # How To Use
 ## Long Story Short
 #### 1. Modify and Recompile Lumberyard.
