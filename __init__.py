@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Mixamo Rig Converter for Lumberyard",
     "author": "Galib F. Arrieta",
-    "version": (1, 1, 1),
+    "version": (2, 0, 0),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to bake Root motion for Mixamo Animations"),
@@ -59,13 +59,6 @@ if "bpy" in locals():
 ###############################################################################
 class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
     """Container of options for Mixamo To Lumberyard Converter"""
-    rootBoneName:  bpy.props.StringProperty(
-        name="Root Bone Name",
-        description="Optional. Name of the root motion bone that will be added",
-        maxlen = 256,
-        default = "root",
-        subtype='BYTE_STRING')
-
     extractTranslationX: bpy.props.BoolProperty(
         name="X",
         description="Extract X Axis Translation.",
@@ -154,16 +147,11 @@ class OBJECT_OT_convert(bpy.types.Operator):
             return {'CANCELLED'}
 
         hip_bone_name = hip_bone.name
-        root_bone_name = mixalot.rootBoneName.decode('UTF-8')
-        if hip_bone_name == root_bone_name:
-            self.report({'ERROR_INVALID_INPUT'}, "Error: {} is already the root bone name.".format(root_bone_name))
-            return {'CANCELLED'}
 
         conversion_iterator = mainmixalot.Convert(
             sceneObj=context.scene,
             armatureObj=context.object,
             hipBoneName=hip_bone_name,
-            rootBoneName=root_bone_name,
             extractTranslationX=mixalot.extractTranslationX, zeroOutTranslationX=mixalot.zeroOutTranslationX,
             extractTranslationY=mixalot.extractTranslationY, zeroOutTranslationY=mixalot.zeroOutTranslationY,
             extractTranslationZ=mixalot.extractTranslationZ, zeroOutTranslationZ=mixalot.zeroOutTranslationZ,
@@ -209,12 +197,6 @@ class OBJECT_OT_exportfbx(bpy.types.Operator):
             self.report({'ERROR'}, "Error: The Armature must have at least one bone.")
             return {'CANCELLED'}
 
-        current_root_bone_name = root_bone.name
-        root_bone_name = mixalot.rootBoneName.decode('UTF-8')
-        if current_root_bone_name != root_bone_name:
-            self.report({'ERROR_INVALID_INPUT'}, "Error: It seems the asset has not been converted by Lumbermixalot.")
-            return {'CANCELLED'}
-
         try:
             out_filename = mainmixalot.ExportFBX(
                 armatureObj=context.object,
@@ -243,10 +225,6 @@ class LUMBERMIXALOT_VIEW_3D_PT_lumbermixalot(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
         #UI Section
-        box = layout.box()
-        row = box.row()
-        row.prop(scene.mixalot, "rootBoneName")
-
         box = layout.box()
         box.label(text="Motion Extraction Options")
         

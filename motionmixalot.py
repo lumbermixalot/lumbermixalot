@@ -86,11 +86,11 @@ def _ValidateKeyFrameVectorName(vectorName):
         raise Exception("'{}' is an invalid vectorName. It should be one of: {}".format(vectorName, VECTOR_NAMES))
 
 
-def _BuildDataPath(boneName, vectorName):
+def _BuildBoneDataPath(boneName, vectorName):
     return "pose.bones[\"{}\"].{}".format(boneName, vectorName)
 
 
-def _GetKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex):
+def _GetBoneKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex):
     #mainAction = bpy.data.actions[0] #Armature|mixamo.com|Layer0""
     #for curve in mainAction.fcurves:
     #    print(curve.data_path)
@@ -105,26 +105,45 @@ def _GetKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex):
     #    pose.bones["Hips"].scale
     #    pose.bones["Hips"].scale
     _ValidateKeyFrameVectorName(vectorName)
-    dataPath = _BuildDataPath(boneName, vectorName)
+    dataPath = _BuildBoneDataPath(boneName, vectorName)
+    fcurve = actionObj.fcurves.find(dataPath, index=vectorComponentIndex)
+    return fcurve
+
+# Same as above but for the root armature Obj.
+def _GetKeyFrames(actionObj, vectorName, vectorComponentIndex):
+    _ValidateKeyFrameVectorName(vectorName)
+    dataPath = vectorName
     fcurve = actionObj.fcurves.find(dataPath, index=vectorComponentIndex)
     return fcurve
 
 
-def _GetNumKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex):
-    fcurve = _GetKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
+def _GetBoneNumKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex):
+    fcurve = _GetBoneKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
     return len(fcurve.keyframe_points)
 
 
-def _InsertKeyFrames(armatureObj, actionObj, boneName, vectorName, vectorComponentIndex):
-    fcurve = _GetKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
-    dataPath = _BuildDataPath(boneName, vectorName)
+def _InsertBoneKeyFrames(armatureObj, actionObj, boneName, vectorName, vectorComponentIndex):
+    fcurve = _GetBoneKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
+    dataPath = _BuildBoneDataPath(boneName, vectorName)
     if fcurve is not None:
         print("The fcurve {} at index {} already exists".format(dataPath, vectorComponentIndex))
         return fcurve
     if not armatureObj.keyframe_insert(dataPath, index=vectorComponentIndex, frame=1):
         print("Failed to insert new empty KeyFrames at path {} index {}".format(dataPath, vectorComponentIndex))
         return None
-    return _GetKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
+    return _GetBoneKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
+
+
+def _InsertKeyFrames(armatureObj, actionObj, vectorName, vectorComponentIndex):
+    fcurve = _GetKeyFrames(actionObj, vectorName, vectorComponentIndex)
+    dataPath = vectorName
+    if fcurve is not None:
+        print("The fcurve {} at index {} already exists".format(dataPath, vectorComponentIndex))
+        return fcurve
+    if not armatureObj.keyframe_insert(dataPath, index=vectorComponentIndex, frame=1):
+        print("Failed to insert new empty KeyFrames at path {} index {}".format(dataPath, vectorComponentIndex))
+        return None
+    return _GetKeyFrames(actionObj, vectorName, vectorComponentIndex)
 
 
 def _RemoveAllKeyFrames(fcurve, fromFrameIndex=0):
@@ -233,9 +252,9 @@ def _GetBoneLocalLocationsFromFcurves(boneName):
     retList = []
 
     actionObj = bpy.data.actions[0]
-    fcurveX = _GetKeyFrames(actionObj, boneName, 'location', 0)
-    fcurveY = _GetKeyFrames(actionObj, boneName, 'location', 1)
-    fcurveZ = _GetKeyFrames(actionObj, boneName, 'location', 2)
+    fcurveX = _GetBoneKeyFrames(actionObj, boneName, 'location', 0)
+    fcurveY = _GetBoneKeyFrames(actionObj, boneName, 'location', 1)
+    fcurveZ = _GetBoneKeyFrames(actionObj, boneName, 'location', 2)
     lenX = len(fcurveX.keyframe_points)
     lenY = len(fcurveY.keyframe_points)
     lenZ = len(fcurveZ.keyframe_points)
@@ -263,10 +282,10 @@ def _GetBoneLocalQuaternionsFromFcurves(boneName):
     retList = []
 
     actionObj = bpy.data.actions[0]
-    fcurveW = _GetKeyFrames(actionObj, boneName, 'rotation_quaternion', 0)
-    fcurveX = _GetKeyFrames(actionObj, boneName, 'rotation_quaternion', 1)
-    fcurveY = _GetKeyFrames(actionObj, boneName, 'rotation_quaternion', 2)
-    fcurveZ = _GetKeyFrames(actionObj, boneName, 'rotation_quaternion', 3)
+    fcurveW = _GetBoneKeyFrames(actionObj, boneName, 'rotation_quaternion', 0)
+    fcurveX = _GetBoneKeyFrames(actionObj, boneName, 'rotation_quaternion', 1)
+    fcurveY = _GetBoneKeyFrames(actionObj, boneName, 'rotation_quaternion', 2)
+    fcurveZ = _GetBoneKeyFrames(actionObj, boneName, 'rotation_quaternion', 3)
 
     lenW = len(fcurveW.keyframe_points)
     lenX = len(fcurveX.keyframe_points)
@@ -353,16 +372,22 @@ def _TransformVectorListByDefaultBoneWorldMatrix(obj, vectorList):
     return transformMatrix, transformedList
 
 
+def _TransformVectorListByObjectWorldMatrix(obj, vectorList):
+    transformMatrix = obj.matrix_world
+    transformedList = _TransformVectorList(vectorList, transformMatrix)
+    return transformMatrix, transformedList
+
+
 #Returns a tuple (localLocationsList, transformMatrix, worldLocationsList)
 # This is a simplified function because it doesn't traverse the bone hierarchy
-# at all. It assummes @boneName is the name of the first child bobe of the
+# at all. It assummes @boneName is the name of the first child bone of the
 # armature @obj.
 #@obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
 #@boneName (string). Name of the current root bone as originated by Mixamo.
 #   The root bone from Mixamo is usually named "Hips".
 def _GetBoneLocations(obj, boneName):
     localLocations = _GetBoneLocalLocationsFromFcurves(boneName)
-    transformMatrix, worldLocations = _TransformVectorListByDefaultBoneWorldMatrix(
+    transformMatrix, worldLocations = _TransformVectorListByObjectWorldMatrix(
         obj, localLocations)
     return (localLocations, transformMatrix, worldLocations)
 
@@ -529,7 +554,7 @@ def _GetVectorListAxisAsArray(vectorList, axis):
 #locationData is a list of Vector.
 def _SubtractLocationDataFromBoneFCurves(boneName, locationData):
     for axis in range(3):  #0=X, 1=Y, 2=Z
-        fcurve = _GetKeyFrames(bpy.data.actions[0], boneName, 'location', axis)
+        fcurve = _GetBoneKeyFrames(bpy.data.actions[0], boneName, 'location', axis)
         keyFramesCount = len(fcurve.keyframe_points)
         if keyFramesCount < 1:
             print("The source fcurve was already empty")
@@ -543,7 +568,21 @@ def _SubtractLocationDataFromBoneFCurves(boneName, locationData):
 #locationList is a list of Vector.
 def _SetLocationDataForBoneFCurves(boneName, locationList):
     for axis in range(3):  #0=X, 1=Y, 2=Z
-        fcurve = _GetKeyFrames(bpy.data.actions[0], boneName, 'location', axis)
+        fcurve = _GetBoneKeyFrames(bpy.data.actions[0], boneName, 'location', axis)
+        keyFramesCount = len(fcurve.keyframe_points)
+        if keyFramesCount < 1:
+            print("The source fcurve was already empty")
+            continue
+        for frameIndex in range(keyFramesCount):
+            srcKfp = fcurve.keyframe_points[frameIndex]
+            v = locationList[frameIndex]
+            srcKfp.co[1] = v[axis]
+
+
+#locationList is a list of Vector.
+def _SetLocationDataForFCurves(locationList):
+    for axis in range(3):  #0=X, 1=Y, 2=Z
+        fcurve = _GetKeyFrames(bpy.data.actions[0], 'location', axis)
         keyFramesCount = len(fcurve.keyframe_points)
         if keyFramesCount < 1:
             print("The source fcurve was already empty")
@@ -556,7 +595,7 @@ def _SetLocationDataForBoneFCurves(boneName, locationList):
 
 def _SetRotationDataForBoneFCurves(boneName, quaternionList):
     for axis in range(4):  #o=W, 1=X, 2=Y, 3=Z
-        fcurve = _GetKeyFrames(bpy.data.actions[0], boneName, 'rotation_quaternion', axis)
+        fcurve = _GetBoneKeyFrames(bpy.data.actions[0], boneName, 'rotation_quaternion', axis)
         keyFramesCount = len(fcurve.keyframe_points)
         if keyFramesCount < 1:
             print("The source fcurve was already empty")
@@ -566,6 +605,18 @@ def _SetRotationDataForBoneFCurves(boneName, quaternionList):
             q = quaternionList[frameIndex]
             srcKfp.co[1] = q[axis]  
     
+
+def _SetRotationDataForFCurves(quaternionList):
+    for axis in range(4):  #o=W, 1=X, 2=Y, 3=Z
+        fcurve = _GetKeyFrames(bpy.data.actions[0], 'rotation_quaternion', axis)
+        keyFramesCount = len(fcurve.keyframe_points)
+        if keyFramesCount < 1:
+            print("The source fcurve was already empty")
+            continue
+        for frameIndex in range(keyFramesCount):
+            srcKfp = fcurve.keyframe_points[frameIndex]
+            q = quaternionList[frameIndex]
+            srcKfp.co[1] = q[axis] 
 
 def _ClearCloseToZeroDataFromArrayInPlace(arr, tolerance = 0.1):
     cnt = len(arr)
@@ -590,19 +641,39 @@ def _BuildVectorListFromArrays(arrayDataX, arrayDataY, arrayDataZ):
 #Makes sure the bone named @boneName contains the exact same amount of keyframe
 # 'location' data as the bone named  @templateBoneName
 #@obj should the "Armature" object
-def _InsertLocationKeyframes(obj, boneName, templateBoneName):
+def _InsertBoneLocationKeyframes(obj, boneName, templateBoneName):
     actionObj = bpy.data.actions[0]
     for axis in range(3):
-        newFcurve = _InsertKeyFrames(obj, actionObj, boneName, 'location', axis)#0=X, 1=Y, 2=Z
-        templateFCurve = _GetKeyFrames(actionObj, templateBoneName, 'location', axis) 
+        newFcurve = _InsertBoneKeyFrames(obj, actionObj, boneName, 'location', axis)#0=X, 1=Y, 2=Z
+        templateFCurve = _GetBoneKeyFrames(actionObj, templateBoneName, 'location', axis) 
+        _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=0.0)
+
+#Makes sure the armature obj contains the exact same amount of keyframe
+# 'location' data as the bone named  @templateBoneName
+#@obj should the "Armature" object
+def _InsertLocationKeyframes(obj, templateBoneName):
+    actionObj = bpy.data.actions[0]
+    for axis in range(3):
+        newFcurve = _InsertKeyFrames(obj, actionObj, 'location', axis)#0=X, 1=Y, 2=Z
+        templateFCurve = _GetBoneKeyFrames(actionObj, templateBoneName, 'location', axis)
         _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=0.0)
 
 
-def _InsertRotationKeyframes(obj, boneName, templateBoneName):
+def _InsertBoneRotationKeyframes(obj, boneName, templateBoneName):
     actionObj = bpy.data.actions[0]
     for axis in range(4):
-        newFcurve = _InsertKeyFrames(obj, actionObj, boneName, 'rotation_quaternion', axis)#0=X, 1=Y, 2=Z
-        templateFCurve = _GetKeyFrames(actionObj, templateBoneName, 'rotation_quaternion', axis)
+        newFcurve = _InsertBoneKeyFrames(obj, actionObj, boneName, 'rotation_quaternion', axis)#0=X, 1=Y, 2=Z
+        templateFCurve = _GetBoneKeyFrames(actionObj, templateBoneName, 'rotation_quaternion', axis)
+        if axis == 0: #W.
+            _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=1.0)
+        else:
+            _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=0.0)
+
+def _InsertRotationKeyframes(obj, templateBoneName):
+    actionObj = bpy.data.actions[0]
+    for axis in range(4):
+        newFcurve = _InsertKeyFrames(obj, actionObj, 'rotation_quaternion', axis)#0=X, 1=Y, 2=Z
+        templateFCurve = _GetBoneKeyFrames(actionObj, templateBoneName, 'rotation_quaternion', axis)
         if axis == 0: #W.
             _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=1.0)
         else:
@@ -620,7 +691,7 @@ def _ClearDataForAxes(vectorList, clearX, clearY, clearZ):
             v.z = 0.0        
 
 
-def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
+def ProcessMotion(sceneObj, armatureObj, hipBoneName,
                   extractTranslationX, zeroOutTranslationX,
                   extractTranslationY, zeroOutTranslationY,
                   extractTranslationZ, zeroOutTranslationZ,
@@ -630,15 +701,13 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
     Main function that transforms a Motion type of Asset per Lumberyard 
     requirements.
 
-    In Short: Adds the "root" bone to the armature and transfers root motion
-     from the Hips bone to the "root" bone. The motion data is transferred
-     from Hips bone FCurves to  the "root" bone FCurves.
+    In Short: Transfers root motion
+     from the Hips bone to the "Armature" object. The motion data is transferred
+     from Hips bone FCurves to  the "Armature" FCurves.
 
     @sceneObj (bpy.types.Scene)
     @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
     @hipBoneName (string). Name of the "Hips" bone as originated by Mixamo.
-    @rootBoneName (string). Name of the root motion bone that will be added to
-        the armature.
     @extractTranslationX,Y,Z (bool). Extract X,Y,Z Axis Translation.
     @zeroOutTranslationX,Y,Z (bool). Zero Out X,Y,Z Axis Translation upon
         extraction.
@@ -646,10 +715,6 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
     @zeroOutRotationZ (bool). Zero Out Rotation around Z Axis upon extraction.
     @dumpCSVs (bool) DEBUG Only. Dump motion vector data as CSV files
     """
-    #The first goal is to apply the object rotation if it is not 0,0,0.
-    cmn.ApplyCurrentRotationAs000(armatureObj)
-    yield Status("Applied rotation")
-
     hipLocalLocations, hipWorldMatrix, hipWorldLocations = _GetBoneLocations(armatureObj, hipBoneName)
     yield Status("Got '{}' bone local and world locations".format(hipBoneName))
     if dumpCSVs:
@@ -684,7 +749,7 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
     
     #startTimeNS = time.perf_counter_ns()
     #Extract World Positions of all the key frames for the Hip bone.
-    keyFrameCount = _GetNumKeyFrames(bpy.data.actions[0], hipBoneName, 'location', 0)
+    keyFrameCount = _GetBoneNumKeyFrames(bpy.data.actions[0], hipBoneName, 'location', 0)
     print("Frame Count is ", keyFrameCount)
     keyFrameStart = 1
     keyFrameEnd = keyFrameCount
@@ -706,8 +771,6 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
     rawFeetWorldAxisDataZ = _GetVectorListAxisAsArray(bboxBaseLocations, 2)
     yield Status("extracted world location axis arrays from '{}' bone".format(hipBoneName))
 
-    _AddSiblingRootBone(armatureObj, rootBoneName)
-
     if extractTranslationX or extractTranslationY or extractTranslationZ:
         _ClearCloseToZeroDataFromArrayInPlace(rawFeetWorldAxisDataZ)
         yield Status("Cleared close to 0.0 feet world Z values")
@@ -719,9 +782,9 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
             _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
                 "feetWorldLocations_beforeClear.csv")
 
-        #Make sure the root bone has all the required keyframes allocated.
-        _InsertLocationKeyframes(armatureObj, rootBoneName, hipBoneName)
-        yield Status("Inserted empty location KeyFrames in '{}' bone".format(rootBoneName))
+        #Make sure the transform of the Armature node has all the required keyframes allocated.
+        _InsertLocationKeyframes(armatureObj, hipBoneName)
+        yield Status("Inserted empty location KeyFrames in '{}' ".format(armatureObj.name))
 
         #Let's clear the feet world locations data for the axis that won't require root motion extraction
         _ClearDataForAxes(feetWorldLocations, not extractTranslationX,
@@ -754,20 +817,13 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
                 _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
                 "feetWorldLocations_afterZeroedOut.csv")
 
-        rootBoneLocalLocations = _GetBoneLocalLocationsFromWorldLocations(
-            feetWorldLocations, armatureObj.pose.bones[rootBoneName], armatureObj.matrix_world)
-        yield Status("Got local locations for '{}' bone".format(rootBoneName))
-
-        _SetLocationDataForBoneFCurves(rootBoneName, rootBoneLocalLocations)
-        yield Status("Set location root motion to '{}' bone locations FCurve".format(rootBoneName))
-        if dumpCSVs:
-            _SaveVectorListAsCsv(rootBoneLocalLocations, keyFrameStart,
-                "rootBoneLocalLocations.csv")
+        _SetLocationDataForFCurves(feetWorldLocations)
+        yield Status("Set location root motion to '{}' locations FCurve".format(armatureObj.name))
 
     if extractRotationZ:
         #Apply rotation around Z axis.
-        _InsertRotationKeyframes(armatureObj, rootBoneName, hipBoneName)
-        yield Status("Inserted empty rotation keyframes in '{}' bone quaternions FCurve".format(rootBoneName))
+        _InsertRotationKeyframes(armatureObj, hipBoneName)
+        yield Status("Inserted empty rotation keyframes in '{}' quaternions FCurve".format(armatureObj.name))
 
         #Update Hips rotations with noZ rotation.
         _SetRotationDataForBoneFCurves(hipBoneName, hipsLocalQuaternionsListNoZ)
@@ -775,18 +831,15 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName, rootBoneName,
 
         if not zeroOutRotationZ:
             #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
-            boneWorldMatrix = _GetBoneWorldMatrix(armatureObj, rootBoneName)
+            worldMatrix = armatureObj.matrix_world
 
-            #rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(zAxisWorldQuaternionsList, boneWorldMatrix.inverted())
-            rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(mirroredZAxisWorldQuaternionsList, boneWorldMatrix.inverted())
-            yield Status("Transformed '{}' bone world Quaternions to local Quaternions".format(rootBoneName))
+            rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(mirroredZAxisWorldQuaternionsList, worldMatrix.inverted())
+            yield Status("Transformed '{}' world Quaternions to local Quaternions".format(armatureObj.name))
 
-            _SetRotationDataForBoneFCurves(rootBoneName, rootLocalQuaternionsListOnlyZ)
-            yield Status("Applied root motion Z rotation to '{}' bone quaternion FCurves".format(rootBoneName))
+            _SetRotationDataForFCurves(rootLocalQuaternionsListOnlyZ)
+            yield Status("Applied root motion Z rotation to '{}' quaternion FCurves".format(armatureObj.name))
 
-    #Finally make "root" the father of "Hips".
-    _MakeParentBone(armatureObj, parentBoneName=rootBoneName, childBoneName=hipBoneName)
-    yield Status("Completed root motion extraction from '{}' bone to '{}' bone".format(hipBoneName, rootBoneName))
+    yield Status("Completed root motion extraction from '{}' bone to '{}'".format(hipBoneName, armatureObj.name))
     
 
 

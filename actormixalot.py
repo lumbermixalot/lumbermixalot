@@ -34,76 +34,29 @@ else:
     from .commonmixalot import Status
     from . import commonmixalot as cmn
 
-#Adds the root motion bone to the Actor. The Bone will be located at
-#  world (0,0,0) pointing towards -Y.
-# @obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
-# @rootBoneName (string). Name of the root motion bone that will be added to
-#    the armature.
-def _AddRootMotionBone(obj, rootBoneName):
-    if not cmn.HasOnlyOneRootBone(obj):
-        raise Exception("The Armature must have only one root bone!")
-    if cmn.HasRootMotionBone(obj, rootBoneName):
-        print("Armature already had root motion bone")
-        return
-    #Enter Edit Mode
-    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+def _RemoveUnnecessaryUvMaps(obj):
+    for childObj in obj.children:
+        if childObj.type != 'MESH':
+            continue
+        uvlayers = childObj.data.uv_layers
+        while len(uvlayers) > 2:
+            layerToRemove = uvlayers[2]
+            print("From mesh {}, Removed unnecessary layer {}".format(childObj.name, layerToRemove.name))
+            uvlayers.remove(layerToRemove)
 
-    ebones = obj.data.edit_bones
-
-    #let's hold a reference to the current root bone. (The Hips)
-    oldRootBone = ebones[0]
-
-    #Create the new root bone
-    newRootBone = ebones.new(rootBoneName)
-    boneSize = 1.0/obj.scale[0]
-    newRootBone.tail = (0.0, -boneSize, 0)
-    oldRootBone.parent = newRootBone
-
-    #Exit edit mode to save bones so they can be used in pose mode
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    #Finally make sure the new bone structure makes the default rest pose.
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    bpy.ops.pose.armature_apply()
-
-    #Exit pose mode to save bones
-    bpy.ops.object.mode_set(mode='OBJECT')
-    print("Added root bone and updated resting pose.")
-
-
-#Mixamo Actors appear to have empty animation data which confuses Lumberyard
-#when the fbx asset is imported. To make life easier it is better to delete
-#the empty animation data.
-#@obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
-def _ClearAnimationData(obj):
-    if obj.animation_data:
-        obj.animation_data_clear()
-        print('Removed animation data')
-    else:
-        print('NO animation data found')
-
-
-def ProcessActor(armatureObj, rootBoneName):
+def ProcessActor(armatureObj):
     """
     Main function that converts an Actor/Character type of asset per 
     Lumberyard requirements.
-    
-    Adds the root bone to the armature and makes it the new resting pose.
+
+    This new version removes any other UVMaps beyond the first two.
+    The reason is because O3DE reserves those extra uvmaps as vertex streams
+    and there's a limit of 12 streams.
 
     @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
-    @rootBoneName (string). Name of the root motion bone that will be added to
-        the armature.
     """
-    #The first goal is to apply the object rotation if it is not 0,0,0.
-    #Notice that we do not apply the rotation to the meshes, only to the Armature.
-    #armatureObj = bpy.data.objects['Armature']
-    yield Status("Starting actor conversion")
+    yield Status("Starting removal of unnecessary uvmaps")
+    _RemoveUnnecessaryUvMaps(armatureObj)
+    yield Status("Cleared unnecessary uvmaps")
 
-    cmn.ApplyCurrentRotationAs000(armatureObj)
-    yield Status("Applied rotation")
-
-    _ClearAnimationData(armatureObj)
-    yield Status("Cleared empty animation data")
-
-    _AddRootMotionBone(armatureObj, rootBoneName)
     yield Status("Actor is ready for exporting.")

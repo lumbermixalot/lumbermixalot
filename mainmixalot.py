@@ -52,7 +52,7 @@ if "bpy" in locals():
 #@fbxFilePath (string) a fully qualified file path, suitable for file
 #   exporting.
 def _ExportFbxInternal(fbxFilePath):
-    bpy.ops.export_scene.fbx(filepath=fbxFilePath, check_existing=False, axis_forward='Y', axis_up='Z', path_mode='COPY')
+    bpy.ops.export_scene.fbx(filepath=fbxFilePath, check_existing=False, axis_forward='-Y', axis_up='Z', path_mode='COPY')
     print("{} exported successfully".format(fbxFilePath))
 
 
@@ -127,7 +127,7 @@ def _GetOutputFilename(isActor,  fbxFilename, fbxOutputPath,
     return os.path.join(fbxOutputPath, fbxFilename)
     
 
-def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
+def Convert(sceneObj, armatureObj, hipBoneName="",
             extractTranslationX=True, zeroOutTranslationX=False,
             extractTranslationY=True, zeroOutTranslationY=False,
             extractTranslationZ=True, zeroOutTranslationZ=False,
@@ -146,8 +146,6 @@ def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
     @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
     @hipBoneName (string). Name of the "Hips" bone as originated by Mixamo.
         If Empty or None, the value will be assumed to tbe "Hips".
-    @rootBoneName (string). Name of the root motion bone that will be added to
-        the armature. If Empty or None, the value will be assumed to be "root".
     @extractTranslationX,Y,Z (bool). Extract X,Y,Z Axis Translation.
     @zeroOutTranslationX,Y,Z (bool). Zero Out X,Y,Z Axis Translation upon
         extraction.
@@ -167,11 +165,8 @@ def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
     yield Status("starting Convert")
     
     hipBoneName = "" if (hipBoneName is None) else hipBoneName.strip()
-    rootBoneName = "" if (rootBoneName is None) else rootBoneName.strip()
     if hipBoneName == "":
         hipBoneName = "Hips"
-    if rootBoneName == "":
-        rootBoneName = "root"
 
     isActor = _CheckArmatureContainsMesh(armatureObj)
     
@@ -183,10 +178,10 @@ def Convert(sceneObj, armatureObj, hipBoneName="", rootBoneName="",
     yield Status("Processed output path strings")
 
     if isActor:
-        conversion_iterator = actormixalot.ProcessActor(armatureObj, rootBoneName)
+        conversion_iterator = actormixalot.ProcessActor(armatureObj)
     else:
         conversion_iterator = motionmixalot.ProcessMotion(sceneObj, armatureObj,
-            hipBoneName, rootBoneName,
+            hipBoneName,
             extractTranslationX, zeroOutTranslationX,
             extractTranslationY, zeroOutTranslationY,
             extractTranslationZ, zeroOutTranslationZ,
