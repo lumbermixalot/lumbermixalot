@@ -1,5 +1,9 @@
 # lumbermixalot Changelog
 
+## v2.0.1
+Minor fix when extracting rotation around Z-axis. It is better but doesn't work yet.
+Not a big deal because usually you want to control rotation with gameplay logic.
+
 ## v2.0.0
 Made changes to make Actor & Motions compatible with O3DE (https://github.com/o3de/o3de)
 Please use v1.1.1 if you are still working with Lumberyard 1.2X.

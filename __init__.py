@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Mixamo Rig Converter for Lumberyard",
     "author": "Galib F. Arrieta",
-    "version": (2, 0, 0),
+    "version": (2, 0, 1),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to bake Root motion for Mixamo Animations"),

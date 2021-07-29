@@ -411,9 +411,9 @@ def _TransformQuaternionsList(quaternionsList, transformMatrix):
 #@obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
 #@quaternionsList (list of Quaternion)
 def _TransformQuaternionListByDefaultBoneWorldMatrix(obj, quaternionsList):
-    worldMatrix = obj.matrix_world
-    boneMatrix = _GetBlenderDefaultBoneMatrix44()
-    transformMatrix = worldMatrix @ boneMatrix
+    #worldMatrix = obj.matrix_world
+    #boneMatrix = _GetBlenderDefaultBoneMatrix44()
+    transformMatrix = obj.matrix_world #worldMatrix @ boneMatrix
     transformedList = _TransformQuaternionsList(quaternionsList,
                                                 transformMatrix)
     return transformMatrix, transformedList
@@ -488,7 +488,7 @@ def _GetBoneLocalLocationsFromWorldLocations(worldLocations, bone, worldMatrix):
 
 #@obj is an Armature Object.
 def _GetBoneWorldMatrix(obj, boneName):
-    bone = obj.pose.bones["root"]
+    bone = obj.pose.bones[boneName]
     objWorldMatrix = obj.matrix_world
     boneWorldMatrix = objWorldMatrix @ bone.matrix
     return boneWorldMatrix
@@ -742,7 +742,7 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
         if dumpCSVs:
             _SaveQuaternionListAsCsv(zAxisWorldQuaternionsList, 0, "zAxisWorldQuaternionsList.csv")
             _SaveQuaternionListAsCsv(mirroredZAxisWorldQuaternionsList, 0, "mirroredZAxisWorldQuaternionsList.csv")
-            _SaveQuaternionListAsCsv(zAxisWorldQuaternionsList, 0, "noZAxisWorldQuaternionsList.csv")
+            _SaveQuaternionListAsCsv(noZAxisWorldQuaternionsList, 0, "noZAxisWorldQuaternionsList.csv")
             _SaveQuaternionListAsCsv(hipsLocalQuaternionsListNoZ, 0, "hipsLocalQuaternionsListNoZ.csv")
             _SaveAxisAnglesListAsCsv(zAxisAnglesList, Vector((0.0, 0.0, 1.0)), 0, "zAxisWorldAnglesList.csv")
 
