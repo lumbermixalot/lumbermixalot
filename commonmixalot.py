@@ -95,3 +95,30 @@ def HasRootMotionBone(obj, rootBoneName):
         if (bone.parent is None) and (bone.name==rootBoneName):
             return True
     return False
+
+
+def GetRestPoseMatrixFromPoseBone(poseBoneObj):
+    """
+    bpy.types.PoseBone
+    All animation data is recorded in the PoseBone.
+    Technically by setting the current frame number
+    with SetCurrentAnimationFrame() you can get the current Matrix4x4
+    from the PoseBone.
+    BUT, All animation data is technically relative to the
+    Rest Pose, and for that We access the matrix from PoseBone.bone
+    which is a bpy.types.Bone 
+    """
+    return poseBoneObj.bone.matrix_local
+
+
+def GetPoseBoneFromArmature(armatureObj, boneName):
+    """
+    @armatureObj is a bpy.types.Armature
+    @boneName str
+    returns a bpy.types.PoseBone
+    """
+    bpy.ops.object.mode_set(mode='POSE')
+    for bone in armatureObj.pose.bones:
+        if bone.name == boneName:
+            return bone
+    return None

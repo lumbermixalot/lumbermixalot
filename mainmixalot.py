@@ -30,12 +30,14 @@ if __package__ is None or __package__ == "":
     import actormixalot
     import motionmixalot
     import commonmixalot
+    import fcurvesmixalot
     from commonmixalot import Status
 else:
     # When running as an installed AddOn, then it runs in package mode.
     from . import actormixalot
     from . import motionmixalot
     from . import commonmixalot
+    from . import fcurvesmixalot
     from .commonmixalot import Status
 
 if "bpy" in locals():
@@ -46,7 +48,8 @@ if "bpy" in locals():
         reload(motionmixalot)
     if "commonmixalot" in locals():
         reload(commonmixalot)
-
+    if "fcurvesmixalot" in locals():
+        reload(fcurvesmixalot)
 
 #Exports the current scene with the right settings for Lumberayrd.
 #@fbxFilePath (string) a fully qualified file path, suitable for file
@@ -168,7 +171,7 @@ def Convert(sceneObj, armatureObj, hipBoneName="",
     if hipBoneName == "":
         hipBoneName = "Hips"
 
-    isActor = _CheckArmatureContainsMesh(armatureObj)
+    isActor = False #_CheckArmatureContainsMesh(armatureObj)
     
     yield Status("Checked Asset Type. isActor={}".format(isActor))
     

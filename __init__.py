@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Mixamo Rig Converter for Lumberyard",
     "author": "Galib F. Arrieta",
-    "version": (2, 0, 1),
+    "version": (2, 0, 2),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to bake Root motion for Mixamo Animations"),
@@ -41,10 +41,14 @@ if __package__ is None or __package__ == "":
     # When running as a standalone script from Blender Text View "Run Script"
     import mainmixalot
     import commonmixalot
+    import motionmixalot
+    import fcurvesmixalot
 else:
     # When running as an installed AddOn, then it runs in package mode.
     from . import mainmixalot
     from . import commonmixalot
+    from . import motionmixalot
+    from . import fcurvesmixalot
 
 if "bpy" in locals():
     from importlib import reload
@@ -52,7 +56,10 @@ if "bpy" in locals():
         reload(mainmixalot)
     if "commonmixalot" in locals():
         reload(commonmixalot)
-
+    if "motionmixalot" in locals():
+        reload(motionmixalot)
+    if "fcurvesmixalot" in locals():
+        reload(fcurvesmixalot)
 
 ###############################################################################
 # Scene Properties
@@ -297,5 +304,42 @@ def unregister():
         bpy.utils.unregister_class(class_)
     del bpy.types.Scene.mixalot
 
+def _myHack():
+    print("\n\n\n\nWelcome To _myHack\n")
+    context = bpy.context
+    if context.object.type != 'ARMATURE':
+        print({'ERROR_INVALID_INPUT'}, "Error: {} is not an Armature.".format(context.object.name))
+        return
+
+    hip_bone = commonmixalot.GetRootBone(context.object)
+    if hip_bone is None:
+        print({'ERROR'}, "Error: The Armature must have at least one bone.")
+        return
+
+    hip_bone_name = hip_bone.name
+
+    conversion_iterator = mainmixalot.Convert(
+        sceneObj=context.scene,
+        armatureObj=context.object,
+        hipBoneName=hip_bone_name,
+        extractTranslationX=True, zeroOutTranslationX=False,
+        extractTranslationY=True, zeroOutTranslationY=False,
+        extractTranslationZ=True, zeroOutTranslationZ=False,
+        extractRotationZ=False, zeroOutRotationZ=False,
+        fbxFilename="",
+        fbxOutputPath="",
+        appendActorOrMotionPath=True,
+        dumpCSVs=True)
+
+    try:
+        for status in conversion_iterator:
+            print({'INFO'}, "Step Done: " + str(status))
+    except Exception as e:
+        print({'ERROR_INVALID_INPUT'}, 'Error: ' + str(e))
+        return
+    print({'INFO'}, "Rig Converted")
+
 if __name__ == "__main__":
     register()
+    # Hackery, Remove after debugging
+    #_myHack()
