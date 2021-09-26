@@ -22,6 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import bpy
+from mathutils import *
+
+class Axis:
+    X = Vector([1, 0, 0])
+    Y = Vector([0, 1, 0])
+    Z = Vector([0, 0, 1])
 
 #For debugging.
 def Dump(obj):
@@ -47,15 +53,8 @@ def ApplyCurrentRotationAs000(obj):
     """
     #Set 'OBJECT' mode
     bpy.ops.object.mode_set(mode='OBJECT')
-
-    rotationEuler = obj.rotation_euler
-    #print(type(rotationObj)) #class Euler
-    #print(dir(rotationObj))
-    if rotationEuler.x > 0.0:
-        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
-        print("Applied rotation")
-    else:
-        print("The rotation was already clean")
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+    print("Applied current rotation")
 
 
 def GetRootBone(obj):
@@ -122,3 +121,41 @@ def GetPoseBoneFromArmature(armatureObj, boneName):
         if bone.name == boneName:
             return bone
     return None
+
+def AddSiblingRootBone(obj, boneName):
+    hasOnlyOneRootBone = cmn.HasOnlyOneRootBone(obj)
+    hasRootMotionBone = cmn.HasRootMotionBone(obj, boneName)
+    if hasOnlyOneRootBone and hasRootMotionBone:
+        raise Exception("Most likely this asset was already processed because it contains a single 'root' bone")
+        return
+    if hasRootMotionBone:
+        print("Armature already had root motion bone")
+        return
+    #Enter Edit Mode
+    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+
+    ebones = obj.data.edit_bones
+
+    #Create the new root bone
+    newRootBone = ebones.new(boneName)
+    boneSize = 1.0/obj.scale[0]
+    newRootBone.tail = (0.0, -boneSize, 0)
+
+    #Exit edit mode to save bones so they can be used in pose mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    print("Added bone '{}' as sibling of the current root bone.".format(boneName))
+
+
+def MakeParentBone(obj, parentBoneName, childBoneName):
+    #Enter Edit Mode
+    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+
+    ebones = obj.data.edit_bones
+    rootBoneIndex = ebones.find(parentBoneName)
+    childBoneIndex = ebones.find(childBoneName)
+    print("root bone index = {}, child bone index = {}".format(rootBoneIndex, childBoneIndex))
+    ebones[childBoneIndex].parent = ebones[rootBoneIndex]
+    
+    #Exit edit mode to save bones so they can be used in pose mode
+    bpy.ops.object.mode_set(mode='OBJECT')

@@ -30,7 +30,7 @@ import bpy
 import os
 import sys
 
-projdir = "C:\\path\\to\\lumbermixalot"
+projdir = "E:\\GIT\\lumbermixalot"
 if not projdir in sys.path:
     sys.path.append(projdir)
 
@@ -38,3 +38,9 @@ filename = os.path.join(projdir, "__init__.py")
 exec(compile(open(filename).read(), filename, 'exec'))
 ```
 Click the *Run Script* button. The Lumbermixalot UI will appear inside the "3D Viewport" as a Panel in the Properties region (Press N Key). You should see a tab named *Lumbermixalot* next to *View*, *Tool* and *Item* tabs.
+
+Quick Tip to clear the 'System Console'
+```python
+import os
+os.system('cls')
+```

@@ -171,7 +171,11 @@ def Convert(sceneObj, armatureObj, hipBoneName="",
     if hipBoneName == "":
         hipBoneName = "Hips"
 
-    isActor = False #_CheckArmatureContainsMesh(armatureObj)
+    # Regardless of the type of conversion Actor or Motion
+    # We need to set the current rotation as 0,0,0
+    commonmixalot.ApplyCurrentRotationAs000(armatureObj)
+
+    isActor = _CheckArmatureContainsMesh(armatureObj)
     
     yield Status("Checked Asset Type. isActor={}".format(isActor))
     

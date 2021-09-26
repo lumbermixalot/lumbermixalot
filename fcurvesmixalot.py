@@ -209,6 +209,27 @@ def AllocateLocationKeyFramesFromPoseBoneToArmature(poseBoneName: str, armatureO
         _CopyKeyFrames(newFcurve, srcFCurve, setDefaultValue=True, defaultValue=0.0)
 
 
+def AllocateQuaternionKeyFramesFromPoseBoneToArmature(poseBoneName: str, armatureObj: bpy.types.Armature):
+    """
+    The 'quaternion' (w, x, y, z) fcurves of the armatureObj will be created if they don't exist.
+    Forces the new fcurves to have the exact same key frames as the @poseBoneName, the only
+    difference is that the value (KeyFrame.co.y) will set to 0 in all ther key frames of all the 4 fcurves
+    created for armatureObj.
+    """
+    dataPaths = (
+        FCurveDataPath.QUATERNION_W,
+        FCurveDataPath.QUATERNION_X,
+        FCurveDataPath.QUATERNION_Y,
+        FCurveDataPath.QUATERNION_Z,
+    )
+    for axis, dataPath in enumerate(dataPaths):
+        newFcurve = CreateFCurveForArmatureObj(armatureObj, dataPath)
+        srcFCurve = GetPoseBoneFCurveFromDataPath(armatureObj, poseBoneName, dataPath)
+        if axis == 0: #W.
+            _CopyKeyFrames(newFcurve, srcFCurve, setDefaultValue=True, defaultValue=1.0)
+        else:
+            _CopyKeyFrames(newFcurve, srcFCurve, setDefaultValue=True, defaultValue=0.0)    
+
 def CopyLocationKeyFramesFromPoseBoneToArmature(poseBoneName: str, armatureObj: bpy.types.Armature):
     """
     Straight copy of the 'location' data (x, y, z) fcurves from a bone to the armature.
@@ -289,3 +310,82 @@ def SetLocationDataForArmatureKeyFrames(armatureObj: bpy.types.Armature, locatio
             srcKfp = fcurve.keyframe_points[frameIndex]
             v = locationsList[frameIndex]
             srcKfp.co[1] = v[axis]
+
+
+#Returns a list of Quaternions
+def GetPoseBoneLocalQuaternionsFromFcurves(armatureObj, boneName):
+    retList = []
+
+    fcurveW = GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_W)
+    fcurveX = GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_X)
+    fcurveY = GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_Y)
+    fcurveZ = GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_Z)
+
+    lenW = len(fcurveW.keyframe_points)
+    lenX = len(fcurveX.keyframe_points)
+    lenY = len(fcurveY.keyframe_points)
+    lenZ = len(fcurveZ.keyframe_points)
+    if (lenW != lenX) or (lenW != lenY) or (lenW != lenZ):
+        print("Was expecting fcurves of the same length. lenW={}, lenX={}, lenY={}, lenZ={}".format(lenW, lenX, lenY, lenZ))
+        return retList
+    keyFramesCount = lenW
+    print("Number of Quaternion keyframes in bone {} = {}".format(boneName, lenW))
+    if keyFramesCount < 1:
+        print("The fcurves are empty!")
+        return retList
+
+    for frameIndex in range(keyFramesCount):
+        KfpW = fcurveW.keyframe_points[frameIndex]
+        KfpX = fcurveX.keyframe_points[frameIndex]
+        KfpY = fcurveY.keyframe_points[frameIndex]
+        KfpZ = fcurveZ.keyframe_points[frameIndex]
+        q = mathutils.Quaternion((KfpW.co[1], KfpX.co[1], KfpY.co[1], KfpZ.co[1]))
+        retList.append(q)
+
+    return retList
+
+
+def SetQuaternionDataForPoseBoneFCurves(armatureObj: bpy.types.Armature , boneName: str, quaternionList: list[mathutils.Quaternion]):
+    dataPaths = (
+        FCurveDataPath.QUATERNION_W,
+        FCurveDataPath.QUATERNION_X,
+        FCurveDataPath.QUATERNION_Y,
+        FCurveDataPath.QUATERNION_Z,
+    )
+    for axis, dataPath in enumerate(dataPaths):
+        fcurve = GetPoseBoneFCurveFromDataPath(armatureObj, boneName, dataPath)
+        keyFramesCount = len(fcurve.keyframe_points)
+        if keyFramesCount < 1:
+            print(f"The fcurve from bone '{boneName}' and datapath '{dataPath}' was already empty")
+            continue
+        quaternionCount = len(quaternionList)
+        if  quaternionCount < keyFramesCount:
+            print(f"The fcurve from bone '{boneName}' and datapath '{dataPath}' has {keyFramesCount} key frames, but the input list only has {quaternionCount} quaternions")
+        count = min(quaternionCount, keyFramesCount)
+        for frameIndex in range(count):
+            srcKfp = fcurve.keyframe_points[frameIndex]
+            q = quaternionList[frameIndex]
+            srcKfp.co[1] = q[axis]
+
+
+def SetQuaternionDataForArmatureKeyFrames(armatureObj: bpy.types.Armature, quaternionList: list[mathutils.Quaternion]):
+    dataPaths = (
+        FCurveDataPath.QUATERNION_W,
+        FCurveDataPath.QUATERNION_X,
+        FCurveDataPath.QUATERNION_Y,
+        FCurveDataPath.QUATERNION_Z,
+    )
+    for axis, dataPath in enumerate(dataPaths):
+        fcurve = GetArmatureFCurveFromDataPath(armatureObj, dataPath)
+        keyFramesCount = len(fcurve.keyframe_points)
+        if keyFramesCount < 1:
+            print(f"The fcurve from armature '{armatureObj.name}' and datapath '{dataPath}' was already empty")
+            continue
+        quaternionCount = len(quaternionList)
+        if  quaternionCount < keyFramesCount:
+            print(f"The fcurve from armature '{armatureObj.name}' and datapath '{dataPath}' has {keyFramesCount} key frames, but the input list only has {quaternionCount} quaternions")
+        count = min(quaternionCount, keyFramesCount)
+        for frameIndex in range(count):
+            srcKfp = fcurve.keyframe_points[frameIndex]
+            q = quaternionList[frameIndex]
+            srcKfp.co[1] = q[axis]

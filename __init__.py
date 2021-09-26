@@ -305,6 +305,10 @@ def unregister():
     del bpy.types.Scene.mixalot
 
 def _myHack():
+    """
+    Used for debugging purposes, when it is not convenient to register the UI
+    of this plugin.
+    """
     print("\n\n\n\nWelcome To _myHack\n")
     context = bpy.context
     if context.object.type != 'ARMATURE':
@@ -325,7 +329,7 @@ def _myHack():
         extractTranslationX=True, zeroOutTranslationX=False,
         extractTranslationY=True, zeroOutTranslationY=False,
         extractTranslationZ=True, zeroOutTranslationZ=False,
-        extractRotationZ=False, zeroOutRotationZ=False,
+        extractRotationZ=True, zeroOutRotationZ=False,
         fbxFilename="",
         fbxOutputPath="",
         appendActorOrMotionPath=True,

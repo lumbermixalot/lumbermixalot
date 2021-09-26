@@ -43,56 +43,6 @@ else:
 #Customize to your needs.
 CSV_OUTPUT_DIR = sys.path[-1]
 
-def _AddSiblingRootBone(obj, boneName):
-    hasOnlyOneRootBone = cmn.HasOnlyOneRootBone(obj)
-    hasRootMotionBone = cmn.HasRootMotionBone(obj, boneName)
-    if hasOnlyOneRootBone and hasRootMotionBone:
-        raise Exception("Most likely this asset was already processed because it contains a single 'root' bone")
-        return
-    if hasRootMotionBone:
-        print("Armature already had root motion bone")
-        return
-    #Enter Edit Mode
-    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-
-    ebones = obj.data.edit_bones
-
-    #Create the new root bone
-    newRootBone = ebones.new(boneName)
-    boneSize = 1.0/obj.scale[0]
-    newRootBone.tail = (0.0, -boneSize, 0)
-
-    #Exit edit mode to save bones so they can be used in pose mode
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    print("Added bone '{}' as sibling of the current root bone.".format(boneName))
-
-
-def _MakeParentBone(obj, parentBoneName, childBoneName):
-    #Enter Edit Mode
-    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-
-    ebones = obj.data.edit_bones
-    rootBoneIndex = ebones.find(parentBoneName)
-    childBoneIndex = ebones.find(childBoneName)
-    print("root bone index = {}, child bone index = {}".format(rootBoneIndex, childBoneIndex))
-    ebones[childBoneIndex].parent = ebones[rootBoneIndex]
-    
-    #Exit edit mode to save bones so they can be used in pose mode
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-
-def _InsertBoneKeyFrames(armatureObj, actionObj, boneName, vectorName, vectorComponentIndex):
-    fcurve = _GetBoneKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
-    dataPath = _BuildBoneDataPath(boneName, vectorName)
-    if fcurve is not None:
-        print("The fcurve {} at index {} already exists".format(dataPath, vectorComponentIndex))
-        return fcurve
-    if not armatureObj.keyframe_insert(dataPath, index=vectorComponentIndex, frame=1):
-        print("Failed to insert new empty KeyFrames at path {} index {}".format(dataPath, vectorComponentIndex))
-        return None
-    return _GetBoneKeyFrames(actionObj, boneName, vectorName, vectorComponentIndex)
-
 
 def _GetBBOX(ObjBbox):
     vecMin = Vector(ObjBbox[0])
@@ -161,69 +111,6 @@ def _GetBBoxWorldLocations(sceneObj: bpy.types.Scene , armatureObj: bpy.types.Ar
     return vectorList
 
 
-def _GetPoseBoneKeyFrameMatrices(sceneObj: bpy.types.Scene , armatureObj: bpy.types.Armature, poseBoneName: str, keyFrameNumbersList: list[int]) -> list[Matrix]:
-    """
-    Returns an array of Matrices. Each matrix is the Pose Bone transformation matrix per key frame.
-    """
-    poseBoneObj = cmn.GetPoseBoneFromArmature(armatureObj, poseBoneName)
-    matrixList = []
-    for frameNumber in keyFrameNumbersList:
-        sceneObj.frame_set(frameNumber)
-        matrixList.append(poseBoneObj.matrix)
-        print(f"at frame {frameNumber}, matrix:\n{poseBoneObj.matrix}")
-    return matrixList
-
-
-#Returns a list of Quaternions
-def _GetBoneLocalQuaternionsFromFcurves(armatureObj, boneName):
-    retList = []
-
-    fcurveW = _GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_W)
-    fcurveX = _GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_X)
-    fcurveY = _GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_Y)
-    fcurveZ = _GetPoseBoneFCurveFromDataPath(armatureObj, boneName, FCurveDataPath.QUATERNION_Z)
-
-    lenW = len(fcurveW.keyframe_points)
-    lenX = len(fcurveX.keyframe_points)
-    lenY = len(fcurveY.keyframe_points)
-    lenZ = len(fcurveZ.keyframe_points)
-    if (lenW != lenX) or (lenW != lenY) or (lenW != lenZ):
-        print("Was expecting fcurves of the same length. lenW={}, lenX={}, lenY={}, lenZ={}".format(lenW, lenX, lenY, lenZ))
-        return retList
-    keyFramesCount = lenW
-    print("Number of Quaternion keyframes in bone {} = {}".format(boneName, lenW))
-    if keyFramesCount < 1:
-        print("The fcurves are empty!")
-        return retList
-
-    for frameIndex in range(keyFramesCount):
-        KfpW = fcurveW.keyframe_points[frameIndex]
-        KfpX = fcurveX.keyframe_points[frameIndex]
-        KfpY = fcurveY.keyframe_points[frameIndex]
-        KfpZ = fcurveZ.keyframe_points[frameIndex]
-        q = Quaternion((KfpW.co[1], KfpX.co[1], KfpY.co[1], KfpZ.co[1]))
-        retList.append(q)
-
-    return retList
-
-
-#Returns a list of Eulers
-def _GetEulerListFromQuaternionsList(localQuaternionsList):
-    retList = []
-    for q in localQuaternionsList:
-        e = q.to_euler('XYZ')
-        retList.append(e)
-    return retList
-
-#Returns a list of Matrix33
-def _GetMatrix33ListFromQuaternionsList(localQuaternionsList):
-    retList = []
-    for q in localQuaternionsList:
-        m33 = q.to_matrix()
-        retList.append(m33)
-    return retList
-
-
 #@vectorList is a list of MathUtils.Vector
 #@matrix is a MathUtils.Matrix
 #returns a list of MathUtils.Vector
@@ -265,35 +152,31 @@ def _GetRestPoseMatrixFromPoseBone(poseBoneObj):
     """
     return poseBoneObj.bone.matrix_local
 
-def _TransformPoseBoneLocalLocationsToWorldLocations(armatureObj, poseBoneObj, vectorList):
+def _TransformPoseBoneLocalLocationsToWorldLocations(armatureObj:bpy.types.Armature, poseBoneObj: bpy.types.PoseBone, vectorList: list[Vector]):
     """
-    poseBoneObj is bpy.types.PoseBone
-    vectorList is list of mathutils.Vector
-    Returns tuple (matrix, list)
+    Returns tuple (matrix, list[Vector])
     """
     restMatrix = _GetRestPoseMatrixFromPoseBone(poseBoneObj)
     transformMatrix = armatureObj.matrix_world @ restMatrix
     return transformMatrix, _TransformVectorList(transformMatrix, vectorList)
 
 
-#Returns a tuple (localLocationsList, transformMatrix, worldLocationsList)
-# This is a simplified function because it doesn't traverse the bone hierarchy
-# at all. It assummes @boneName is the name of the first child bone of the
-# armature @obj.
-#@obj (bpy.types.Armature). Object.type is assumed to be 'ARMATURE'
-#@boneName (string). Name of the current root bone as originated by Mixamo.
-#   The root bone from Mixamo is usually named "Hips".
-def _GetPoseBoneLocations(armatureObj, boneName):
+def _GetPoseBoneLocations(armatureObj: bpy.types.Armature, boneName: str):
+    """
+    Returns a tuple (localLocationsList, transformMatrix, worldLocationsList)
+     This is a simplified function because it doesn't traverse the bone hierarchy
+     at all. It assummes @boneName is the name of the first child bone of the
+     armature @obj.
+       The root bone from Mixamo is usually named "Hips".
+    """
     localLocations = fcv.GetPoseBoneLocalLocationsFromFcurves(armatureObj, boneName)
     poseBoneObj = cmn.GetPoseBoneFromArmature(armatureObj, boneName)
     transformMatrix, worldLocations = _TransformPoseBoneLocalLocationsToWorldLocations(armatureObj, poseBoneObj, localLocations)
     return (localLocations, transformMatrix, worldLocations)
 
 
-#@quaternionsList is a list of MathUtils.Quaternion
-#@transformMatrix is a 4x4 MathUtils.Matrix
-#returns a list of MathUtils.Quaternion
-def _TransformQuaternionsList(quaternionsList, transformMatrix):
+
+def _TransformQuaternionsList(transformMatrix: Matrix, quaternionsList: list[Quaternion]) -> list[Quaternion]:
     retList = []
     for q in quaternionsList:
         rotMat = q.to_matrix().to_4x4()
@@ -303,39 +186,99 @@ def _TransformQuaternionsList(quaternionsList, transformMatrix):
     return retList
 
 
-#Returns a tuple (transformMatrix, transformedList)
-#   Where transformMatrix is a 4x4 world Matrix.
-#   transformedList is a new list of Quaternion.
-#@obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
-#@quaternionsList (list of Quaternion)
-def _TransformQuaternionListByDefaultBoneWorldMatrix(obj, quaternionsList):
-    #worldMatrix = obj.matrix_world
-    #boneMatrix = _GetBlenderDefaultBoneMatrix44()
-    transformMatrix = obj.matrix_world #worldMatrix @ boneMatrix
-    transformedList = _TransformQuaternionsList(quaternionsList,
-                                                transformMatrix)
-    return transformMatrix, transformedList
+def _TransformPoseBoneLocalQuaternionsToWorldQuaternions(armatureObj: bpy.types.Armature,
+                                                         poseBoneObj: bpy.types.PoseBone,
+                                                         localQuaternionsList: list[Quaternion]):
+    restMatrix = _GetRestPoseMatrixFromPoseBone(poseBoneObj)
+    print(f"restMatrix={restMatrix}")
+    transformMatrix = armatureObj.matrix_world @ restMatrix
+    return transformMatrix, _TransformQuaternionsList(transformMatrix, localQuaternionsList)
+    
 
 
-def _GetAngleAroundProjectedAxisFromQuaternion(q, axisVector, axisVectorOrthogonal):
-    transformedOrthogonal = q @ axisVectorOrthogonal
-    projected = transformedOrthogonal - (axisVector * transformedOrthogonal.dot(axisVector))
-    projected.normalize()
-    cosineOfAngle = axisVectorOrthogonal.dot(projected)
-    return math.acos(cosineOfAngle)
+def ExtractAngleAroundUpVectorFromQuaternion(upVector: Vector, forwardVector: Vector, rightVector: Vector, q: Quaternion, qForwardIndex: int = 1):
+    """
+    A quaternion @q represents an arbitrary rotation around some vector.
+    This function converts @q into a matrix 3x3. The forward basis vector of this matrix3x3,
+    let's call it 'qmForward', is projected into the plane formed by @rightVector & @forwardVector.
+    In Blender, usually the forward basis vector is Y (index 1), except for bones which
+    by default the Z (index 2) is the forward vector. This is why We have an input parameter
+    @qForwardIndex.
+    this projected vector is normalized and we'll call it 'qmProjected'.
+    Finally we calculate the angle between 'qmProjected' and @forwardVector. Which is the same
+    as calculating the angle of rotation around the @upVector.
+    """
+    #This works under simple circumstances.
+    #euler = q.to_euler('XYZ')
+    #return euler.z
+    mQ = q.to_matrix()
+    qmForward = mQ.col[qForwardIndex]
+
+    # if @qmForward and @upVector are parallel to each other
+    # the angle is 0.
+    delta = 1.0 - abs(qmForward.dot(upVector))
+    if delta < 0.01:
+        print("Too Close")
+        return 0
+    qCrossed = qmForward.cross(upVector)
+    qCrossed.normalize()
+    qmProjected = upVector.cross(qCrossed)
+    cosAngle = qmProjected.dot(forwardVector)
+    # We are almost done, except for the fact that the cosine is a number between
+    # -1 and 1, which always gets us the value of the cosine of the SHORTEST arc.
+    # Example:
+    # case1           case2  
+    # v1                 v1  
+    #   |             |      
+    #   |             |      
+    #   |             |      
+    # a / b         b \ a    
+    #  /               \     
+    # /                 \    
+    # v2                 v2
+    # In both cases above v1.dot(v2) will return the same value,
+    # even though in case2 v2 is to the right of v1.
+    # In case 1 We need angle a.
+    # In case 2 We need angle b.
+    # In case 1 v2 is to left of the plane made by the @upVector & @forwardVector.
+    # We can use the sign of the dot product against the @rightVector to figure this out.
+    if qmProjected.dot(rightVector) < 0:
+        return math.acos(cosAngle)
+    return -math.acos(cosAngle)
 
 
-#Returns a tuple (zAxisWorldQuaternionsList, retMirroredQuaternionList, zAxisAnglesList)
-def _ExtractZaxisWorldQuaternions(worldQuaternionsList):
-    zAxis = Vector((0.0, 0.0, 1.0))
-    zAxisOrthogonal = Vector((1.0, 0.0, 0.0))
+def _GetTransformedBasisVectors(matrix:Matrix, up: Vector, forward: Vector, right: Vector):
+    """
+    Returns tuple of normalized vectors (upTransformed, forwardTransformed, rightTransformed) according to the
+    armature world matrixx 
+    """
+    upTransformed = matrix @ up
+    forwardTransformed = matrix @ forward
+    rightTransformed = matrix @ right
+    return (upTransformed.normalized(), forwardTransformed.normalized(), rightTransformed.normalized())
+
+
+def _ExtractZaxisWorldQuaternions(armatureObj:bpy.types.Armature, worldQuaternionsList: list[Quaternion]):
+    """
+    The idea of this function is that We have a list of world quaternions,
+    We need to calculate the influence of rotation around the Zaxis that is embedded in
+    each quaternion in the input list.
+    This function will be used later to split the world quaternions so that the zAxis
+    influence is applied to the parent Armature, and We remove the zAxis influence and
+    force it back to the root hip bone.  
+    Returns a tuple (zAxisWorldQuaternionsList, retMirroredQuaternionList, zAxisAnglesList)
+    """
+    # REMARK: We don't call _GetTransformedBasisVectors() anymore because the starting armature rotation
+    # is applied as the default rotation.
+    #upBasis, forwardBasis, rightBasis = _GetTransformedBasisVectors(armatureObj.matrix_world, cmn.Axis.Z, cmn.Axis.Y, cmn.Axis.X)
+    upBasis, forwardBasis, rightBasis = cmn.Axis.Z, cmn.Axis.Y, cmn.Axis.X
     retQuaternionList = []
     retMirroredQuaternionList = []
     retAnglesList = []
     for q in worldQuaternionsList:
-        angleAroundZaxis = _GetAngleAroundProjectedAxisFromQuaternion(q, zAxis, zAxisOrthogonal)
-        newQ = Quaternion(zAxis, angleAroundZaxis)
-        newQMirrored = Quaternion(zAxis, angleAroundZaxis + math.pi)
+        angleAroundZaxis = ExtractAngleAroundUpVectorFromQuaternion(upBasis, forwardBasis, rightBasis, q, 1)
+        newQ = Quaternion(cmn.Axis.Z, angleAroundZaxis)
+        newQMirrored = Quaternion(cmn.Axis.Z, angleAroundZaxis + math.pi)
         retQuaternionList.append(newQ)
         retMirroredQuaternionList.append(newQMirrored)
         angleDeg = math.degrees(angleAroundZaxis)
@@ -343,35 +286,46 @@ def _ExtractZaxisWorldQuaternions(worldQuaternionsList):
     return (retQuaternionList, retMirroredQuaternionList, retAnglesList)
 
 
+def _RemoveInfluenceOfQuaternionFromQuaternion(qInfluence: Quaternion, q: Quaternion):
+    """
+    This function removes the influence of quaternion @qInfluence from @q.
+    The mathematical principal is that:
+    q = qInfluence @ qX. This function returns qX.
+    qInfluenceInv @ q = qInfluenceInv @ qInfluence @ qX
+    qInfluenceInv @ q = qX
+    """
+    qInfluenceInv = qInfluence.inverted()
+    qX = qInfluenceInv @ q
+    return qX
+
 #Returns a new list of quaternions where all quaternions in @qList
 #have the rotations in qListDelta removed from them
-def _RemoveRotationsFromQuaternions(qListDelta, qList):
-    length = len(qList)
+def _RemoveInfluenceOfQuaternionsFromQuaternions(qListDelta, qList):
     retList = []
-    for idx in range(length):
-        deltaQuat = qListDelta[idx]
-        w = deltaQuat.inverted() @ qList[idx]
-        retList.append(w)
+    for qInfluence, q in zip(qListDelta, qList):
+        newQ = _RemoveInfluenceOfQuaternionFromQuaternion(qInfluence, q)
+        retList.append(newQ)
     return retList
 
 
-#Returns a tuple (localQuaternionsList, transformMatrix, worldQuaternionsList)
-#   Where:
-#   localQuaternionsList is a list of Quaternion with local bone data as
-#       extracted from FCurves.
-#   transformMatrix A 4x4 World transform Matrix used to transform the
-#       Quaternions in localQuaternionsList.
-#   worldQuaternionsList The transformed Quaternions, now in World coordinates.
-# This is a simplified function because it doesn't traverse the bone hierarchy
-# at all. It assummes @boneName is the name of the first child bobe of the
-# armature @obj.
-#@obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
-#@boneName (string). Name of the current root bone as originated by Mixamo.
-#   The root bone from Mixamo is usually named "Hips".
-def _GetBoneRotations(obj, boneName):
-    localQuaternionsList = _GetBoneLocalQuaternionsFromFcurves(boneName)
-    transformMatrix, worldQuaternionsList = _TransformQuaternionListByDefaultBoneWorldMatrix(obj, localQuaternionsList)
+def _GetPoseBoneQuaternions(armatureObj: bpy.types.Armature, boneName: str):
+    """
+    Returns a tuple (localQuaternionsList, transformMatrix, worldQuaternionsList)
+       Where:
+       localQuaternionsList is a list of Quaternion with local bone data as
+           extracted from FCurves.
+       transformMatrix A 4x4 World transform Matrix used to transform the
+           Quaternions in localQuaternionsList.
+       worldQuaternionsList The transformed Quaternions, now in World coordinates.
+     This is a simplified function because it doesn't traverse the bone hierarchy
+     at all. It assummes @boneName is the name of the first child bone of the
+     armature @obj.
+    """
+    localQuaternionsList = fcv.GetPoseBoneLocalQuaternionsFromFcurves(armatureObj, boneName)
+    poseBoneObj = cmn.GetPoseBoneFromArmature(armatureObj, boneName)
+    transformMatrix, worldQuaternionsList = _TransformPoseBoneLocalQuaternionsToWorldQuaternions(armatureObj, poseBoneObj, localQuaternionsList)
     return (localQuaternionsList, transformMatrix, worldQuaternionsList)
+
 
 
 #Debug function that dumps a list of Vector as a CSV file.
@@ -431,31 +385,6 @@ def _GetVectorListAxisAsArray(vectorList, axis):
     return pyArray
 
 
-def _SetRotationDataForBoneFCurves(boneName, quaternionList):
-    for axis in range(4):  #o=W, 1=X, 2=Y, 3=Z
-        fcurve = _GetBoneKeyFrames(bpy.data.actions[0], boneName, 'rotation_quaternion', axis)
-        keyFramesCount = len(fcurve.keyframe_points)
-        if keyFramesCount < 1:
-            print("The source fcurve was already empty")
-            continue
-        for frameIndex in range(keyFramesCount):
-            srcKfp = fcurve.keyframe_points[frameIndex]
-            q = quaternionList[frameIndex]
-            srcKfp.co[1] = q[axis]  
-    
-
-def _SetRotationDataForFCurves(quaternionList):
-    for axis in range(4):  #o=W, 1=X, 2=Y, 3=Z
-        fcurve = _GetKeyFrames(bpy.data.actions[0], 'rotation_quaternion', axis)
-        keyFramesCount = len(fcurve.keyframe_points)
-        if keyFramesCount < 1:
-            print("The source fcurve was already empty")
-            continue
-        for frameIndex in range(keyFramesCount):
-            srcKfp = fcurve.keyframe_points[frameIndex]
-            q = quaternionList[frameIndex]
-            srcKfp.co[1] = q[axis] 
-
 def _ClearCloseToZeroDataFromArrayInPlace(arr, tolerance = 0.1):
     cnt = len(arr)
     for idx in range(cnt):
@@ -474,27 +403,6 @@ def _BuildVectorListFromArrays(arrayDataX, arrayDataY, arrayDataZ):
                    arrayDataZ[idx]))
         retList.append(v)
     return retList
-
-
-def _InsertBoneRotationKeyframes(obj, boneName, templateBoneName):
-    actionObj = bpy.data.actions[0]
-    for axis in range(4):
-        newFcurve = _InsertBoneKeyFrames(obj, actionObj, boneName, 'rotation_quaternion', axis)#0=X, 1=Y, 2=Z
-        templateFCurve = _GetBoneKeyFrames(actionObj, templateBoneName, 'rotation_quaternion', axis)
-        if axis == 0: #W.
-            _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=1.0)
-        else:
-            _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=0.0)
-
-def _InsertRotationKeyframes(obj, templateBoneName):
-    actionObj = bpy.data.actions[0]
-    for axis in range(4):
-        newFcurve = _InsertKeyFrames(obj, actionObj, 'rotation_quaternion', axis)#0=X, 1=Y, 2=Z
-        templateFCurve = _GetBoneKeyFrames(actionObj, templateBoneName, 'rotation_quaternion', axis)
-        if axis == 0: #W.
-            _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=1.0)
-        else:
-            _CopyKeyFrames(newFcurve, templateFCurve, defaultValue=0.0)
 
 
 def _ClearDataForAxes(vectorList, clearX, clearY, clearZ):
@@ -532,7 +440,9 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
     @zeroOutRotationZ (bool). Zero Out Rotation around Z Axis upon extraction.
     @dumpCSVs (bool) DEBUG Only. Dump motion vector data as CSV files
     """
+    print(f"Armature world matrix:\n{armatureObj.matrix_world}")
     hipLocalLocations, hipWorldMatrix, hipWorldLocations = _GetPoseBoneLocations(armatureObj, hipBoneName)
+    print(f"hipWorldMatrix = {hipWorldMatrix}")
     yield Status("Got '{}' bone local and world locations".format(hipBoneName))
     if dumpCSVs:
         _SaveVectorListAsCsv(hipLocalLocations, 0,
@@ -541,7 +451,8 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
             "HipWorldLocations.csv")
 
     if extractRotationZ:
-        (localQuaternionsList, transformMatrix, worldQuaternionsList) = _GetBoneRotations(armatureObj, hipBoneName)
+        (localQuaternionsList, transformMatrix, worldQuaternionsList) = _GetPoseBoneQuaternions(armatureObj, hipBoneName)
+        print(f"transformMatrix = {transformMatrix}")
         yield Status("Got '{}' bone local and world rotations".format(hipBoneName))
         if dumpCSVs:
             _SaveQuaternionListAsCsv(localQuaternionsList, 0, "hipLocalQuaternionsList.csv")
@@ -549,13 +460,13 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
 
         #The idea is that zAxisWorldQuaternionsList will contain the world rotations of the root bone
         #around zAxis.
-        zAxisWorldQuaternionsList, mirroredZAxisWorldQuaternionsList, zAxisAnglesList = _ExtractZaxisWorldQuaternions(worldQuaternionsList)
+        zAxisWorldQuaternionsList, mirroredZAxisWorldQuaternionsList, zAxisAnglesList = _ExtractZaxisWorldQuaternions(armatureObj, worldQuaternionsList)
         #noZAxisWorldQuaternionsList will be the new world rotations for the hip bone because it has
         #rotation around zAxis removed from it.
-        noZAxisWorldQuaternionsList = _RemoveRotationsFromQuaternions(zAxisWorldQuaternionsList, worldQuaternionsList)
+        noZAxisWorldQuaternionsList = _RemoveInfluenceOfQuaternionsFromQuaternions(zAxisWorldQuaternionsList, worldQuaternionsList)
         #Now hipsLocalQuaternionsListNoZ contains the new quaternions for the hip bone but zAxis rotation has been
         #removed from it.
-        hipsLocalQuaternionsListNoZ = _TransformQuaternionsList(noZAxisWorldQuaternionsList, hipWorldMatrix.inverted())
+        hipsLocalQuaternionsListNoZ = _TransformQuaternionsList(hipWorldMatrix.inverted(), noZAxisWorldQuaternionsList)
         if dumpCSVs:
             _SaveQuaternionListAsCsv(zAxisWorldQuaternionsList, 0, "zAxisWorldQuaternionsList.csv")
             _SaveQuaternionListAsCsv(mirroredZAxisWorldQuaternionsList, 0, "mirroredZAxisWorldQuaternionsList.csv")
@@ -618,11 +529,8 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
 
         #Get the feetWorldLocations transformed in hips local space. The resulting
         #vectors will be deltas that will be subtracted from the hip local locations.
-        
         hipBoneWorldLocationDeltas = _SubtractVectorLists(hipWorldLocations, feetWorldLocations)
         newHipLocalLocations = _TransformVectorList(hipWorldMatrix.inverted(), hipBoneWorldLocationDeltas)
-        #deltaHipLocalLocations = _TransformVectorList(hipWorldMatrix.inverted(), feetWorldLocations)
-        #deltaHipLocalLocations = _InverseTransformVectorListWithMatrixList(feetWorldLocations, hipBoneMatrixList)
 
         yield Status("Got '{}' bone local locations from feet world locations".format(hipBoneName))
         if dumpCSVs:
@@ -653,21 +561,21 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
 
     if extractRotationZ:
         #Apply rotation around Z axis.
-        _InsertRotationKeyframes(armatureObj, hipBoneName)
-        yield Status("Inserted empty rotation keyframes in '{}' quaternions FCurve".format(armatureObj.name))
+        fcv.AllocateQuaternionKeyFramesFromPoseBoneToArmature(hipBoneName, armatureObj)
+        yield Status(f"Inserted empty rotation keyframes in '{armatureObj.name}' quaternions FCurve")
 
         #Update Hips rotations with noZ rotation.
-        _SetRotationDataForBoneFCurves(hipBoneName, hipsLocalQuaternionsListNoZ)
-        yield Status("Remove Z axis rotation from '{}' bone quaternions FCurve".format(hipBoneName))
+        fcv.SetQuaternionDataForPoseBoneFCurves(armatureObj, hipBoneName, hipsLocalQuaternionsListNoZ)
+        yield Status(f"Removed Z axis rotation from '{hipBoneName}' bone quaternions FCurve")
 
         if not zeroOutRotationZ:
             #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
             worldMatrix = armatureObj.matrix_world
 
-            rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(mirroredZAxisWorldQuaternionsList, worldMatrix.inverted())
+            rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(worldMatrix.inverted(), zAxisWorldQuaternionsList)
             yield Status("Transformed '{}' world Quaternions to local Quaternions".format(armatureObj.name))
 
-            _SetRotationDataForFCurves(rootLocalQuaternionsListOnlyZ)
+            fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, rootLocalQuaternionsListOnlyZ)
             yield Status("Applied root motion Z rotation to '{}' quaternion FCurves".format(armatureObj.name))
 
     yield Status("Completed root motion extraction from '{}' bone to '{}'".format(hipBoneName, armatureObj.name))
