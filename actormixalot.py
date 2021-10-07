@@ -34,29 +34,54 @@ else:
     from .commonmixalot import Status
     from . import commonmixalot as cmn
 
-def _RemoveUnnecessaryUvMaps(obj):
+
+def _RemoveUnnecessaryUvMaps(obj: bpy.types.Armature, numUVMapsToKeep: int) -> list[int, int]:
+    meshCount = 0
+    removedUVMapsCount = 0
     for childObj in obj.children:
         if childObj.type != 'MESH':
             continue
+        meshCount += 1
         uvlayers = childObj.data.uv_layers
-        while len(uvlayers) > 2:
-            layerToRemove = uvlayers[2]
-            print("From mesh {}, Removed unnecessary layer {}".format(childObj.name, layerToRemove.name))
+        while len(uvlayers) > numUVMapsToKeep:
+            layerToRemove = uvlayers[numUVMapsToKeep]
             uvlayers.remove(layerToRemove)
+            print(f"From mesh '{childObj.name}'', Removed unnecessary UV Map '{layerToRemove.name}'")
+            removedUVMapsCount += 1
+    return meshCount, removedUVMapsCount
 
-def ProcessActor(armatureObj):
+
+# Looks across first level children and see if at least one of them is of type
+# 'MESH'
+def CheckArmatureContainsMesh(obj: bpy.types.Armature):
+    children = obj.children
+    for childObj in children:
+        if childObj.type == 'MESH':
+            return True
+    return False
+
+
+def Convert(armatureObj: bpy.types.Armature, numUVMapsToKeep: int = -1):
     """
     Main function that converts an Actor/Character type of asset per 
-    Lumberyard requirements.
+    O3DE requirements.
 
-    This new version removes any other UVMaps beyond the first two.
+    Applies current armature rotation as the 0,0,0 rotation.
+
+    Optionally removes any other UVMaps in excess of @numUVMapsToKeep.
     The reason is because O3DE reserves those extra uvmaps as vertex streams
     and there's a limit of 12 streams.
-
-    @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
     """
-    yield Status("Starting removal of unnecessary uvmaps")
-    _RemoveUnnecessaryUvMaps(armatureObj)
-    yield Status("Cleared unnecessary uvmaps")
+    yield Status(f"Will apply current rotation of '{armatureObj.name}' as 0,0,0")
+    # Set the current rotation as 0,0,0
+    cmn.ApplyCurrentRotationAs000(armatureObj)
+    yield Status(f"Applied current rotation of '{armatureObj.name}' as 0,0,0")
 
-    yield Status("Actor is ready for exporting.")
+    if numUVMapsToKeep < 0:
+        yield Status("Actor was converted successfully")
+
+    yield Status("Starting removal of unnecessary uvmaps")
+    meshCount, removeCount = _RemoveUnnecessaryUvMaps(armatureObj, numUVMapsToKeep)
+    yield Status(f"Removed {removeCount} UV Maps across {meshCount} meshes")
+
+    yield Status("Actor was converted successfully")

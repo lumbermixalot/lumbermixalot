@@ -1,11 +1,12 @@
 # lumbermixalot
-Blender 2.80 Add-On to make Mixamo Rigs (Characters and Animations) compatible with O3DE game engine
+Blender 2.80 Add-On to make Mixamo assets (Characters and Animations) compatible with O3DE game engine
 
 CAVEAT: 
 1. Not tested with older versions of Blender.
 
 # YouTube Tutorial
 (For v1.1.1 compatible with Lumberyard 1.2X. Do not follow the tutorial if using O3DE)
+** A new tutorial is on the way **
 https://www.youtube.com/playlist?list=PL80dW98K-QMcC-i0OHk0ZjSCS88wscRHc
 
 # How To Use

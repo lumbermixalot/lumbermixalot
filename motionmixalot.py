@@ -327,7 +327,6 @@ def _GetPoseBoneQuaternions(armatureObj: bpy.types.Armature, boneName: str):
     return (localQuaternionsList, transformMatrix, worldQuaternionsList)
 
 
-
 #Debug function that dumps a list of Vector as a CSV file.
 def _SaveVectorListAsCsv(vectorList, startFrame, fileName):
     filename = os.path.join(CSV_OUTPUT_DIR, fileName)
@@ -416,15 +415,218 @@ def _ClearDataForAxes(vectorList, clearX, clearY, clearZ):
             v.z = 0.0        
 
 
-def ProcessMotion(sceneObj, armatureObj, hipBoneName,
-                  extractTranslationX, zeroOutTranslationX,
-                  extractTranslationY, zeroOutTranslationY,
-                  extractTranslationZ, zeroOutTranslationZ,
-                  extractRotationZ, zeroOutRotationZ,
-                  dumpCSVs=False):
+def AddLinearRotationToArmatureLocalRotationData(sceneObj: bpy.types.Scene, armatureObj: bpy.types.Armature, axis: Vector, angularSpeed: float, animationFps: float):
     """
-    Main function that transforms a Motion type of Asset per Lumberyard 
-    requirements.
+    @angularSpeed: In radians per second.
+    REMARK: This function works well, but the rotation is local.
+    """
+    fcurve = fcv.GetArmatureFCurveFromDataPath(armatureObj, fcv.FCurveDataPath.QUATERNION_W)
+    if fcurve is None:
+        #Need to allocate the quaternion fcurves according to the root bone.
+        rootBoneName = cmn.GetRootBone(armatureObj).name
+        fcv.AllocateQuaternionKeyFramesFromPoseBoneToArmature(rootBoneName, armatureObj)
+        print(f"Created the same amount of quaternion key frames from bone '{rootBoneName}'' in the armature '{armatureObj.name}'")
+    else:
+        print(f"The armature '{armatureObj.name}' already has quaternion data.")
+    # The fcurves exist, let's fetch all the quaternions for each keyframe.
+    quaternionList = fcv.GetArmatureLocalQuaternionsFromFcurves(armatureObj)
+    print(f"Collected the quaternion data from the armature '{armatureObj.name}'.")
+    #r s   r
+    #- - = -
+    #s f   f
+    radsPerFrame = angularSpeed * (1.0/animationFps)
+    print(f"radsPerFrame={radsPerFrame}")
+    radians = 0.0
+    newQuaternionList = []
+    for q in quaternionList:
+        parentQ = Quaternion(axis, radians)
+        newQ = parentQ @ q
+        newQuaternionList.append(newQ)
+        radians += radsPerFrame
+    print(f"Transformed the quaternion data from the armature '{armatureObj.name}'.")
+    fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, newQuaternionList)
+    print(f"Finished injecting additional rotation animation to the armature '{armatureObj.name}'.")
+
+
+#ef ProcessMotion(sceneObj, armatureObj, hipBoneName,
+#                 extractTranslationX, zeroOutTranslationX,
+#                 extractTranslationY, zeroOutTranslationY,
+#                 extractTranslationZ, zeroOutTranslationZ,
+#                 extractRotationZ, zeroOutRotationZ,
+#                 dumpCSVs=False):
+#   """
+#   Main function that transforms a Motion type of Asset per Lumberyard 
+#   requirements.
+#
+#   In Short: Transfers root motion
+#    from the Hips bone to the "Armature" object. The motion data is transferred
+#    from Hips bone FCurves to  the "Armature" FCurves.
+#
+#   @sceneObj (bpy.types.Scene)
+#   @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
+#   @hipBoneName (string). Name of the "Hips" bone as originated by Mixamo.
+#   @extractTranslationX,Y,Z (bool). Extract X,Y,Z Axis Translation.
+#   @zeroOutTranslationX,Y,Z (bool). Zero Out X,Y,Z Axis Translation upon
+#       extraction.
+#   @extractRotationZ (bool). Extract Rotation around Z Axis.
+#   @zeroOutRotationZ (bool). Zero Out Rotation around Z Axis upon extraction.
+#   @dumpCSVs (bool) DEBUG Only. Dump motion vector data as CSV files
+#   """
+#   print(f"Armature world matrix:\n{armatureObj.matrix_world}")
+#   hipLocalLocations, hipWorldMatrix, hipWorldLocations = _GetPoseBoneLocations(armatureObj, hipBoneName)
+#   print(f"hipWorldMatrix = {hipWorldMatrix}")
+#   yield Status("Got '{}' bone local and world locations".format(hipBoneName))
+#   if dumpCSVs:
+#       _SaveVectorListAsCsv(hipLocalLocations, 0,
+#           "HipLocalLocations.csv")
+#       _SaveVectorListAsCsv(hipWorldLocations, 0,
+#           "HipWorldLocations.csv")
+#
+#   if extractRotationZ:
+#       (localQuaternionsList, transformMatrix, worldQuaternionsList) = _GetPoseBoneQuaternions(armatureObj, hipBoneName)
+#       print(f"transformMatrix = {transformMatrix}")
+#       yield Status("Got '{}' bone local and world rotations".format(hipBoneName))
+#       if dumpCSVs:
+#           _SaveQuaternionListAsCsv(localQuaternionsList, 0, "hipLocalQuaternionsList.csv")
+#           _SaveQuaternionListAsCsv(worldQuaternionsList, 0, "hipWorldQuaternionsList.csv")
+#
+#       #The idea is that zAxisWorldQuaternionsList will contain the world rotations of the root bone
+#       #around zAxis.
+#       zAxisWorldQuaternionsList, mirroredZAxisWorldQuaternionsList, zAxisAnglesList = _ExtractZaxisWorldQuaternions(armatureObj, worldQuaternionsList)
+#       #noZAxisWorldQuaternionsList will be the new world rotations for the hip bone because it has
+#       #rotation around zAxis removed from it.
+#       noZAxisWorldQuaternionsList = _RemoveInfluenceOfQuaternionsFromQuaternions(zAxisWorldQuaternionsList, worldQuaternionsList)
+#       #Now hipsLocalQuaternionsListNoZ contains the new quaternions for the hip bone but zAxis rotation has been
+#       #removed from it.
+#       hipsLocalQuaternionsListNoZ = _TransformQuaternionsList(hipWorldMatrix.inverted(), noZAxisWorldQuaternionsList)
+#       if dumpCSVs:
+#           _SaveQuaternionListAsCsv(zAxisWorldQuaternionsList, 0, "zAxisWorldQuaternionsList.csv")
+#           _SaveQuaternionListAsCsv(mirroredZAxisWorldQuaternionsList, 0, "mirroredZAxisWorldQuaternionsList.csv")
+#           _SaveQuaternionListAsCsv(noZAxisWorldQuaternionsList, 0, "noZAxisWorldQuaternionsList.csv")
+#           _SaveQuaternionListAsCsv(hipsLocalQuaternionsListNoZ, 0, "hipsLocalQuaternionsListNoZ.csv")
+#           _SaveAxisAnglesListAsCsv(zAxisAnglesList, Vector((0.0, 0.0, 1.0)), 0, "zAxisWorldAnglesList.csv")
+#
+#   
+#   #startTimeNS = time.perf_counter_ns()
+#   #Extract World Positions of all the key frames for the Hip bone.
+#   keyFrameNumbersList = fcv.GetKeyFrameNumbersListPoseBoneDataPath(armatureObj, hipBoneName, fcv.FCurveDataPath.LOCATION_X)
+#   keyFrameStart = keyFrameNumbersList[0]
+#   keyFrameEnd = keyFrameNumbersList[-1]
+#   keyFrameCount = len(keyFrameNumbersList)
+#   print("Frame Count is ", keyFrameCount)
+#   sceneObj.frame_start = keyFrameStart
+#   sceneObj.frame_end = keyFrameEnd
+#
+#   #Extract World Positions of the center of the bottom plane center point
+#   #of the Bound Box per key frame.
+#   #This data will be used to calculate root motion in the Z(Up) axis
+#   bboxBaseLocations = _GetBBoxWorldLocations(
+#       sceneObj, armatureObj, keyFrameNumbersList)
+#   yield Status("Got Armature bottom plane center world location per keyframe")
+#   if dumpCSVs:
+#       _SaveVectorListAsCsv(bboxBaseLocations, keyFrameStart, "BBoxWorldLocations.csv")
+#
+#   # Experimental
+#   # hipBoneMatrixList = _GetPoseBoneKeyFrameMatrices(sceneObj, armatureObj, hipBoneName, keyFrameNumbersList)
+#
+#   rawHipWorldAxisDataX = _GetVectorListAxisAsArray(hipWorldLocations, 0)
+#   rawHipWorldAxisDataY = _GetVectorListAxisAsArray(hipWorldLocations, 1)
+#   rawHipWorldAxisDataZ = _GetVectorListAxisAsArray(hipWorldLocations, 2)
+#   rawFeetWorldAxisDataZ = _GetVectorListAxisAsArray(bboxBaseLocations, 2)
+#   yield Status("extracted world location axis arrays from '{}' bone".format(hipBoneName))
+#
+#   if extractTranslationX or extractTranslationY or extractTranslationZ:
+#       _ClearCloseToZeroDataFromArrayInPlace(rawFeetWorldAxisDataZ)
+#       yield Status("Cleared close to 0.0 feet world Z values")
+#
+#       feetWorldLocations = _BuildVectorListFromArrays(
+#           rawHipWorldAxisDataX, rawHipWorldAxisDataY, rawFeetWorldAxisDataZ)
+#       yield Status("Built feet world locations list from '{}' bone".format(hipBoneName))
+#       if dumpCSVs:
+#           _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
+#               "feetWorldLocations_beforeClear.csv")
+#
+#       #Make sure the transform of the Armature node has all the required keyframes allocated.
+#       fcv.AllocateLocationKeyFramesFromPoseBoneToArmature(hipBoneName, armatureObj)
+#       yield Status(f"Allocated all 'location' KeyFrames in Armature named '{armatureObj.name}' from bone '{hipBoneName}'")
+#
+#       #Let's clear the feet world locations data for the axis that won't require root motion extraction
+#       _ClearDataForAxes(feetWorldLocations, not extractTranslationX,
+#                         not extractTranslationY, not extractTranslationZ)
+#       yield Status("Cleared motion data for the following axes X({}), Y({}), Z({})".format(
+#           not extractTranslationX, not extractTranslationY, not extractTranslationZ))
+#       if dumpCSVs:
+#           _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
+#               "feetWorldLocations_afterClear.csv")
+#
+#       #Get the feetWorldLocations transformed in hips local space. The resulting
+#       #vectors will be deltas that will be subtracted from the hip local locations.
+#       hipBoneWorldLocationDeltas = _SubtractVectorLists(hipWorldLocations, feetWorldLocations)
+#       newHipLocalLocations = _TransformVectorList(hipWorldMatrix.inverted(), hipBoneWorldLocationDeltas)
+#
+#       yield Status("Got '{}' bone local locations from feet world locations".format(hipBoneName))
+#       if dumpCSVs:
+#           _SaveVectorListAsCsv(hipBoneWorldLocationDeltas, keyFrameStart,
+#               "hipBoneWorldLocationDeltas.csv")
+#           _SaveVectorListAsCsv(newHipLocalLocations, keyFrameStart,
+#               "newHipLocalLocations.csv")
+#           #_SaveVectorListAsCsv(deltaHipLocalLocations, keyFrameStart,
+#           #    "deltaHipLocalLocations.csv")
+#
+#       #Subtract from hip the motions that will be transferred to the root.
+#       #fcv.SubtractLocationDataFromPoseBoneKeyFrames(armatureObj, hipBoneName, deltaHipLocalLocations)
+#       fcv.SetLocationDataForPoseBoneKeyFrames(armatureObj, hipBoneName, newHipLocalLocations)
+#       yield Status(f"Removed motion data from '{hipBoneName}' bone locations FCurve")
+#       
+#
+#       if zeroOutTranslationX or zeroOutTranslationY or zeroOutTranslationZ:
+#           _ClearDataForAxes(feetWorldLocations, zeroOutTranslationX,
+#                             zeroOutTranslationY, zeroOutTranslationZ)
+#           yield Status("zeroed Out motion data for the following axes X({}), Y({}), Z({})".format(
+#           zeroOutTranslationX, zeroOutTranslationY, zeroOutTranslationZ))
+#           if dumpCSVs:
+#               _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
+#               "feetWorldLocations_afterZeroedOut.csv")
+#
+#       fcv.SetLocationDataForArmatureKeyFrames(armatureObj, feetWorldLocations)
+#       yield Status("Set location root motion to '{}' locations FCurve".format(armatureObj.name))
+#
+#   if extractRotationZ:
+#       #Apply rotation around Z axis.
+#       fcv.AllocateQuaternionKeyFramesFromPoseBoneToArmature(hipBoneName, armatureObj)
+#       yield Status(f"Inserted empty rotation keyframes in '{armatureObj.name}' quaternions FCurve")
+#
+#       #Update Hips rotations with noZ rotation.
+#       fcv.SetQuaternionDataForPoseBoneFCurves(armatureObj, hipBoneName, hipsLocalQuaternionsListNoZ)
+#       yield Status(f"Removed Z axis rotation from '{hipBoneName}' bone quaternions FCurve")
+#
+#       if not zeroOutRotationZ:
+#           #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
+#           worldMatrix = armatureObj.matrix_world
+#
+#           rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(worldMatrix.inverted(), zAxisWorldQuaternionsList)
+#           yield Status("Transformed '{}' world Quaternions to local Quaternions".format(armatureObj.name))
+#
+#           fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, rootLocalQuaternionsListOnlyZ)
+#           yield Status("Applied root motion Z rotation to '{}' quaternion FCurves".format(armatureObj.name))
+#   
+#   #InjectRotation(sceneObj, armatureObj, cmn.Axis.Z, math.pi, 60.0)
+#   RotateAnimation(armatureObj, cmn.Axis.Z, -math.pi * 0.5)
+#
+#   yield Status("Completed root motion extraction from '{}' bone to '{}'".format(hipBoneName, armatureObj.name))
+
+
+def ExtractRootMotion(sceneObj:bpy.types.Scene,
+                      armatureObj: bpy.types.Armature,
+                      hipBoneName: str,
+                      extractTranslationX: bool,
+                      extractTranslationY: bool,
+                      extractTranslationZ: bool,
+                      extractRotationZ: bool,
+                      dumpCSVs: bool =False):
+    """
+    Extracts root motion animation data from the Hip Bone and assigns it
+    as new animation key frames to the @armatureObj transform.
 
     In Short: Transfers root motion
      from the Hips bone to the "Armature" object. The motion data is transferred
@@ -434,13 +636,15 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
     @armatureObj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
     @hipBoneName (string). Name of the "Hips" bone as originated by Mixamo.
     @extractTranslationX,Y,Z (bool). Extract X,Y,Z Axis Translation.
-    @zeroOutTranslationX,Y,Z (bool). Zero Out X,Y,Z Axis Translation upon
-        extraction.
     @extractRotationZ (bool). Extract Rotation around Z Axis.
-    @zeroOutRotationZ (bool). Zero Out Rotation around Z Axis upon extraction.
     @dumpCSVs (bool) DEBUG Only. Dump motion vector data as CSV files
     """
-    print(f"Armature world matrix:\n{armatureObj.matrix_world}")
+    print(f"Armature world matrix before resetting orientation:\n{armatureObj.matrix_world}")
+
+    # We need to set the current rotation as 0,0,0
+    cmn.ApplyCurrentRotationAs000(armatureObj)
+    yield Status(f"Applied current rotation of '{armatureObj.name}' as 0,0,0")
+
     hipLocalLocations, hipWorldMatrix, hipWorldLocations = _GetPoseBoneLocations(armatureObj, hipBoneName)
     print(f"hipWorldMatrix = {hipWorldMatrix}")
     yield Status("Got '{}' bone local and world locations".format(hipBoneName))
@@ -494,9 +698,6 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
     if dumpCSVs:
         _SaveVectorListAsCsv(bboxBaseLocations, keyFrameStart, "BBoxWorldLocations.csv")
 
-    # Experimental
-    # hipBoneMatrixList = _GetPoseBoneKeyFrameMatrices(sceneObj, armatureObj, hipBoneName, keyFrameNumbersList)
-
     rawHipWorldAxisDataX = _GetVectorListAxisAsArray(hipWorldLocations, 0)
     rawHipWorldAxisDataY = _GetVectorListAxisAsArray(hipWorldLocations, 1)
     rawHipWorldAxisDataZ = _GetVectorListAxisAsArray(hipWorldLocations, 2)
@@ -538,29 +739,16 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
                 "hipBoneWorldLocationDeltas.csv")
             _SaveVectorListAsCsv(newHipLocalLocations, keyFrameStart,
                 "newHipLocalLocations.csv")
-            #_SaveVectorListAsCsv(deltaHipLocalLocations, keyFrameStart,
-            #    "deltaHipLocalLocations.csv")
 
         #Subtract from hip the motions that will be transferred to the root.
-        #fcv.SubtractLocationDataFromPoseBoneKeyFrames(armatureObj, hipBoneName, deltaHipLocalLocations)
         fcv.SetLocationDataForPoseBoneKeyFrames(armatureObj, hipBoneName, newHipLocalLocations)
         yield Status(f"Removed motion data from '{hipBoneName}' bone locations FCurve")
-        
-
-        if zeroOutTranslationX or zeroOutTranslationY or zeroOutTranslationZ:
-            _ClearDataForAxes(feetWorldLocations, zeroOutTranslationX,
-                              zeroOutTranslationY, zeroOutTranslationZ)
-            yield Status("zeroed Out motion data for the following axes X({}), Y({}), Z({})".format(
-            zeroOutTranslationX, zeroOutTranslationY, zeroOutTranslationZ))
-            if dumpCSVs:
-                _SaveVectorListAsCsv(feetWorldLocations, keyFrameStart,
-                "feetWorldLocations_afterZeroedOut.csv")
 
         fcv.SetLocationDataForArmatureKeyFrames(armatureObj, feetWorldLocations)
         yield Status("Set location root motion to '{}' locations FCurve".format(armatureObj.name))
 
     if extractRotationZ:
-        #Apply rotation around Z axis.
+        #Allocate Key frame data for the Armature Quaternions.
         fcv.AllocateQuaternionKeyFramesFromPoseBoneToArmature(hipBoneName, armatureObj)
         yield Status(f"Inserted empty rotation keyframes in '{armatureObj.name}' quaternions FCurve")
 
@@ -568,17 +756,87 @@ def ProcessMotion(sceneObj, armatureObj, hipBoneName,
         fcv.SetQuaternionDataForPoseBoneFCurves(armatureObj, hipBoneName, hipsLocalQuaternionsListNoZ)
         yield Status(f"Removed Z axis rotation from '{hipBoneName}' bone quaternions FCurve")
 
-        if not zeroOutRotationZ:
-            #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
-            worldMatrix = armatureObj.matrix_world
+        #Now, the worldEulerOnlyZ rotations need to be converted to the root bone local frame:
+        worldMatrix = armatureObj.matrix_world
 
-            rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(worldMatrix.inverted(), zAxisWorldQuaternionsList)
-            yield Status("Transformed '{}' world Quaternions to local Quaternions".format(armatureObj.name))
+        rootLocalQuaternionsListOnlyZ = _TransformQuaternionsList(worldMatrix.inverted(), zAxisWorldQuaternionsList)
+        yield Status(f"Transformed '{armatureObj.name}' world Quaternions to local Quaternions")
 
-            fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, rootLocalQuaternionsListOnlyZ)
-            yield Status("Applied root motion Z rotation to '{}' quaternion FCurves".format(armatureObj.name))
+        fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, rootLocalQuaternionsListOnlyZ)
+        yield Status(f"Applied root motion Z rotation to '{armatureObj.name}' quaternion FCurves")
 
-    yield Status("Completed root motion extraction from '{}' bone to '{}'".format(hipBoneName, armatureObj.name))
-    
+    yield Status(f"Completed root motion extraction from '{hipBoneName}' bone to '{armatureObj.name}'")
 
 
+def ClearRootMotionTranslation(armatureObj: bpy.types.Armature,
+                  zeroOutTranslationX: bool,
+                  zeroOutTranslationY: bool,
+                  zeroOutTranslationZ: bool):
+    """
+    Clears (Forces to 0.0) Translation data from the root motion key frames
+    for the selected Axis.
+
+    @zeroOutTranslationX,Y,Z  Switches for Axis to clear.
+    """
+    feetWorldLocations = fcv.GetArmatureLocalLocationsFromFcurves(armatureObj)
+    yield Status(f"Extracted local location data from armature '{armatureObj.name}'")
+
+    _ClearDataForAxes(feetWorldLocations,
+        zeroOutTranslationX, zeroOutTranslationY, zeroOutTranslationZ)
+    yield Status(f"Cleated motion data for the following axes X({zeroOutTranslationX}), Y({zeroOutTranslationY}), Z({zeroOutTranslationZ})")
+
+    fcv.SetLocationDataForArmatureKeyFrames(armatureObj, feetWorldLocations)
+    yield Status(f"New root motion translation has been applied to '{armatureObj.name}' locations FCurve")
+
+
+# REMARK: This function breaks for cases where the hip bone contains
+# weird rotation in between frames.
+#def ClearRootMotionRotationAroundZAxis(armatureObj: bpy.types.Armature):
+#    """
+#    Clears (Forces to 0.0) Rotation data from the root motion key frames
+#    around Z Axis (World Up).
+#    """
+#    quaternionsList = fcv.GetArmatureLocalQuaternionsFromFcurves(armatureObj)
+#    yield Status(f"Extracted local quaternion data from armature '{armatureObj.name}'")
+#
+#    newQuaternionList = []
+#    for q in quaternionsList:
+#        euler = q.to_euler('XYZ')
+#        print(f"Euler x({euler.x}), y({euler.y}), z({math.degrees(euler.z)})")
+#        euler.z = 0.0 + math.pi
+#        newQuaternionList.append(euler.to_quaternion())
+#    yield Status(f"Cleared rotation around Z axis in local quaternions")
+#
+#    fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, newQuaternionList)
+#    yield Status(f"New root motion quaternions have been applied to '{armatureObj.name}' FCurves")
+
+
+def RotateArmatureAnimationData(armatureObj: bpy.types.Armature, axis: Vector, angle: float):
+    """
+    Rotates both the translation and orientation of the armature by the axis+angle
+    @angle is in radians
+    """
+    originalLocations = fcv.GetArmatureLocationsFromFcurves(armatureObj)
+    yield Status("Got current locations from animation data")
+    rotMatrix4x4 = Matrix.Rotation(angle, 4, axis)
+    transformedLocations = _TransformVectorList(rotMatrix4x4, originalLocations)
+    yield Status("Transformed current locations in list")
+    fcv.SetLocationDataForArmatureKeyFrames(armatureObj, transformedLocations)
+    yield Status("Applied transformed locations into the Armature fcurves")
+
+    #Now let's change the orientation of the armature.
+    fcurve = fcv.GetArmatureFCurveFromDataPath(armatureObj, fcv.FCurveDataPath.QUATERNION_W)
+    if fcurve is None:
+        #Need to allocate the quaternion fcurves according to the root bone.
+        rootBoneName = cmn.GetRootBone(armatureObj).name
+        fcv.AllocateQuaternionKeyFramesFromPoseBoneToArmature(rootBoneName, armatureObj)
+        yield Status(f"Created the same amount of quaternion key frames from bone '{rootBoneName}'' in the armature '{armatureObj.name}'")
+    else:
+        yield Status(f"The armature '{armatureObj.name}' already has quaternion data.")
+    # The fcurves exist, let's fetch all the quaternions for each keyframe.
+    quaternionList = fcv.GetArmatureLocalQuaternionsFromFcurves(armatureObj)
+    yield Status(f"Collected the quaternion data from the armature '{armatureObj.name}'.")
+    newQuaternionList = _TransformQuaternionsList(rotMatrix4x4, quaternionList)
+    yield Status(f"Transformed the quaternion data from the armature '{armatureObj.name}'.")
+    fcv.SetQuaternionDataForArmatureKeyFrames(armatureObj, newQuaternionList)
+    yield Status("Applied transformed quaternions into the Armature fcurves")

@@ -21,6 +21,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
 SOFTWARE.
 """
+import os
+
 import bpy
 from mathutils import *
 
@@ -44,20 +46,20 @@ class Status:
         return str(self.msg)
 
 
-def ApplyCurrentRotationAs000(obj):
+def ApplyCurrentRotationAs000(obj: bpy.types.Object, verbose: bool = False):
     """
     Whatever is the default rotation of the armature we need to apply as
     its default rotation. This way the rotation becomes (0,0,0) if seen
-    as an Euler.
-    @obj (bpy.types.Object). Object.type is assumed to be 'ARMATURE'
+    as an XYZ Euler.
     """
     #Set 'OBJECT' mode
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
-    print("Applied current rotation")
+    if verbose:
+        print(f"Applied current rotation as 0,0,0 to object named '{obj.name}'")
 
 
-def GetRootBone(obj):
+def GetRootBone(obj: bpy.types.Armature) -> bpy.types.Bone:
     """
     This method assumes the root bone has no siblings.
     returns the first non parented bone. 
@@ -159,3 +161,51 @@ def MakeParentBone(obj, parentBoneName, childBoneName):
     
     #Exit edit mode to save bones so they can be used in pose mode
     bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def _ExportFbxInternal(fbxFilePath: str):
+    """
+    Exports the current scene with the right settings for O3DE.
+    @fbxFilePath A fully qualified file path, suitable for file exporting.
+    """
+    bpy.ops.export_scene.fbx(filepath=fbxFilePath, check_existing=False, axis_forward='-Y', axis_up='Z', path_mode='COPY')
+    print(f"FBX file '{fbxFilePath}' was exported successfully")
+
+
+def _MakeFilePathForFBX(fbxFilename: str, fbxOutputPath: str) -> str:
+    """
+    Returns a fully qualified file path, suitable for file exporting.
+    @fbxFilename File name (no path). '.fbx' extension is optional.
+        Can not be empty or None.
+    @fbxOutputPath Output directory. The directory will be created if it doesn't exist.
+    """
+    #Clean the fbxFilename.
+    name, _ = os.path.splitext(fbxFilename)
+    fbxFilename = f"{name}.fbx"
+    #Make sure the output directory exists. If not, create it.
+    if not os.path.exists(fbxOutputPath):
+        try:
+            os.makedirs(fbxOutputPath)
+        except:
+            print(f"Failed to create output dir: '{fbxOutputPath}'")
+            return None
+    return os.path.join(fbxOutputPath, fbxFilename)
+
+
+def ExportFBX(fbxFilename: str, fbxOutputPath: str) -> str:
+    """
+    Convenience function to export the current scene as FBX per the required
+    O3DE configuration. 
+
+    @fbxFilename File name (no path). '.fbx' extension is optional.
+    @fbxOutputPath Output directory. Only relevant if @fbxFilename
+        is valid.
+    
+    If Successful, returns the fully qualified path of the exported FBX file.
+    """
+    outputFilename = _MakeFilePathForFBX(fbxFilename,
+                                        fbxOutputPath)
+    if outputFilename is None:
+        raise Exception("Undefined output filename")
+    _ExportFbxInternal(outputFilename)
+    return outputFilename

@@ -83,6 +83,38 @@ def GetPoseBoneLocalLocationsFromFcurves(armatureObj, poseBoneName):
 
     return retList
 
+
+def GetArmatureLocalLocationsFromFcurves(armatureObj):
+    """
+    Returns a list of vectors. Each vector is the raw location
+    data as found in the FCurves
+    """
+    retList = []
+    fcurveX = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.LOCATION_X)
+    fcurveY = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.LOCATION_Y)
+    fcurveZ = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.LOCATION_Z)
+    lenX = len(fcurveX.keyframe_points)
+    lenY = len(fcurveY.keyframe_points)
+    lenZ = len(fcurveZ.keyframe_points)
+    if (lenX != lenY) or (lenX != lenZ):
+        print(f"Was expecting fcurves of the same length. lenX={lenX}, lenY={lenY}, lenZ={lenZ}")
+        return retList
+    keyFramesCount = lenX
+    print(lenX)
+    if keyFramesCount < 1:
+        print("The fcurves are empty!")
+        return retList
+
+    for frameIndex in range(keyFramesCount):
+        KfpX = fcurveX.keyframe_points[frameIndex]
+        KfpY = fcurveY.keyframe_points[frameIndex]
+        KfpZ = fcurveZ.keyframe_points[frameIndex]
+        v = mathutils.Vector( (KfpX.co[1], KfpY.co[1], KfpZ.co[1]) )
+        retList.append(v)
+
+    return retList
+
+
 def GetKeyFramesRangeInfoFromFCurve(fcurve: bpy.types.FCurve) -> list[int, int, int]:
     """
     returns tuple (startFrameNumber, endFrameNumber, numKeyFrames)
@@ -99,6 +131,8 @@ def GetKeyFramesRangeInfoFromPoseBoneDataPath(armatureObj: bpy.types.Armature, p
     returns tuple (startFrameNumber, endFrameNumber, numKeyFrames)
     """
     fcurve = GetPoseBoneFCurveFromDataPath(armatureObj, poseBoneName, fCurveDataPath)
+    if fcurve is None:
+        return (0, 0, 0)
     return GetKeyFramesRangeInfoFromFCurve(fcurve)
 
 
@@ -344,6 +378,37 @@ def GetPoseBoneLocalQuaternionsFromFcurves(armatureObj, boneName):
 
     return retList
 
+def GetArmatureLocalQuaternionsFromFcurves(armatureObj: bpy.types.Armature) -> list[mathutils.Quaternion] :
+    retList = []
+
+    fcurveW = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.QUATERNION_W)
+    fcurveX = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.QUATERNION_X)
+    fcurveY = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.QUATERNION_Y)
+    fcurveZ = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.QUATERNION_Z)
+
+    lenW = len(fcurveW.keyframe_points)
+    lenX = len(fcurveX.keyframe_points)
+    lenY = len(fcurveY.keyframe_points)
+    lenZ = len(fcurveZ.keyframe_points)
+    if (lenW != lenX) or (lenW != lenY) or (lenW != lenZ):
+        print("Was expecting fcurves of the same length. lenW={}, lenX={}, lenY={}, lenZ={}".format(lenW, lenX, lenY, lenZ))
+        return retList
+    keyFramesCount = lenW
+    print("Number of Quaternion keyframes in armature '{}' = {}".format(armatureObj.name, lenW))
+    if keyFramesCount < 1:
+        print("The fcurves are empty!")
+        return retList
+
+    for frameIndex in range(keyFramesCount):
+        KfpW = fcurveW.keyframe_points[frameIndex]
+        KfpX = fcurveX.keyframe_points[frameIndex]
+        KfpY = fcurveY.keyframe_points[frameIndex]
+        KfpZ = fcurveZ.keyframe_points[frameIndex]
+        q = mathutils.Quaternion((KfpW.co[1], KfpX.co[1], KfpY.co[1], KfpZ.co[1]))
+        retList.append(q)
+
+    return retList
+
 
 def SetQuaternionDataForPoseBoneFCurves(armatureObj: bpy.types.Armature , boneName: str, quaternionList: list[mathutils.Quaternion]):
     dataPaths = (
@@ -389,3 +454,32 @@ def SetQuaternionDataForArmatureKeyFrames(armatureObj: bpy.types.Armature, quate
             srcKfp = fcurve.keyframe_points[frameIndex]
             q = quaternionList[frameIndex]
             srcKfp.co[1] = q[axis]
+
+
+def GetArmatureLocationsFromFcurves(armatureObj: bpy.types.Armature) -> list[mathutils.Vector] :
+    retList = []
+
+    fcurveX = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.LOCATION_X)
+    fcurveY = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.LOCATION_Y)
+    fcurveZ = GetArmatureFCurveFromDataPath(armatureObj, FCurveDataPath.LOCATION_Z)
+
+    lenX = len(fcurveX.keyframe_points)
+    lenY = len(fcurveY.keyframe_points)
+    lenZ = len(fcurveZ.keyframe_points)
+    if (lenX != lenY) or (lenX != lenZ):
+        print("Was expecting fcurves of the same length. lenX={}, lenY={}, lenZ={}".format(lenX, lenY, lenZ))
+        return retList
+    keyFramesCount = lenX
+    print(f"Number of Quaternion keyframes in armature '{armatureObj.name}' = {lenX}")
+    if keyFramesCount < 1:
+        print("The fcurves are empty!")
+        return retList
+
+    for frameIndex in range(keyFramesCount):
+        KfpX = fcurveX.keyframe_points[frameIndex]
+        KfpY = fcurveY.keyframe_points[frameIndex]
+        KfpZ = fcurveZ.keyframe_points[frameIndex]
+        v = mathutils.Vector((KfpX.co[1], KfpY.co[1], KfpZ.co[1]))
+        retList.append(v)
+
+    return retList
