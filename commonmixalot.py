@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import os
+import json
 
 import bpy
 from mathutils import *
@@ -209,3 +210,65 @@ def ExportFBX(fbxFilename: str, fbxOutputPath: str) -> str:
         raise Exception("Undefined output filename")
     _ExportFbxInternal(outputFilename)
     return outputFilename
+
+
+def GetFirstAmature(scene: bpy.types.Scene):
+    """
+    Returns the first Armature in the scene.
+    Returns None if there's not at least one Armature.
+    """
+    for obj in scene.objects:
+        if obj.type == 'ARMATURE':
+            return obj
+    return None
+
+
+def ImportFBX(fbxFilepath: str):
+    """
+    Convenience function to  import an FBX file. 
+
+    @fbxFilename File name (no path). '.fbx' extension is optional.
+    @fbxOutputPath Output directory. Only relevant if @fbxFilename
+        is valid.
+    
+    If Successful, returns the fully qualified path of the exported FBX file.
+    """
+    #Before importing, let's clear any left over animation data.
+    oldActions = bpy.data.actions
+    actionNames = []
+    for actionName in oldActions.keys():
+        actionNames.append(actionName)
+    if len(actionNames) > 0:
+        print(f"Found {len(actionNames)} leftover actions. Will proceed to remove them...")
+        for actionName in actionNames:
+            oldActions.remove(oldActions[actionName])
+            print(f"Remove leftover action '{actionName}'")
+        print("Removed all leftover actions")
+    bpy.ops.import_scene.fbx(filepath=fbxFilepath)
+
+
+class FbxProperties:
+    ConfigJson = "lumbermixalot-config.json"
+
+def GetFbxExportPropertiesObj(optionsFileDir: str):
+    filename = os.path.join(optionsFileDir, FbxProperties.ConfigJson)
+    if not os.path.exists(filename):
+        return None
+    with open(filename) as json_file:
+        return json.load(json_file)
+
+
+def GetFbxExportProperty(optionsFileDir: str, property: str) -> str:
+    obj = GetFbxExportPropertiesObj(optionsFileDir)
+    if obj:
+        return obj[property]
+    else:
+        return ""
+
+
+def StoreFbxExportProperty(optionsFileDir: str, property: str, value: str):
+    data = {}
+    data[property] = value
+    filename = os.path.join(optionsFileDir, FbxProperties.ConfigJson)
+    with open(filename, 'w') as outfile:
+        json.dump(data, outfile, indent=4)

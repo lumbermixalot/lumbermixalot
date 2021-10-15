@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Root Motion Extractor Compatible With Mixamo & O3DE",
     "author": "Galib F. Arrieta",
-    "version": (3, 0, 0),
+    "version": (3, 0, 1),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to extract and bake Root motion for Mixamo Animations"),
@@ -77,6 +77,19 @@ def _ShowMessageBox(message: str, title: str = "Lumbermixalot Info", icon = 'INF
 ###############################################################################
 class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
     """Container of options for Mixamo To O3DE Converter"""
+    importedFbxFilename: bpy.props.StringProperty(
+        name="Imported Fbx name",
+        description="Read Only. Displays the name of the last imported FBX file.",
+        maxlen = 256,
+        default = "",
+        subtype='BYTE_STRING')
+    importedFbxDirectoryPath: bpy.props.StringProperty(
+        name="Imported Fbx Directory",
+        description="Read Only. Displays the directory of the last imported FBX file.",
+        maxlen = 1024,
+        default = "",
+        subtype='BYTE_STRING')
+
     removeUVMaps: bpy.props.BoolProperty(
         name="Remove UV Maps",
         description="Remove unnecessary UV Maps. O3DE fails to import an actor with too many UV Maps.",
@@ -131,6 +144,10 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
         description="Angle in Degrees around Z Axis to rotate the whole Root Motion animation.",
         default = -90.0)
 
+    cacheFbxExportOptions: bpy.props.BoolProperty(
+        name="Cache FBX Export Options",
+        description="If enabled, a json file will be created in the directory where the current scene was imported from.",
+        default = True)
     fbxFilename: bpy.props.StringProperty(
         name="Fbx name",
         description="Optional. Name of the output fbx (no path). Leave it"
@@ -151,6 +168,47 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
 ###############################################################################
 # Operators
 ###############################################################################
+class ImportFbxOperator(bpy.types.Operator):
+    """
+    Button/Operator for importing an FBX file.
+    """
+    bl_idname = "lumbermixalot.importfbx"
+    bl_label = "Import FBX"
+    bl_description = "Imports an FBX file."
+    #Properties that are known to fileselect_add
+    filter_glob: bpy.props.StringProperty(default="*.fbx", options={'HIDDEN'})
+    filepath: bpy.props.StringProperty()
+    filename: bpy.props.StringProperty()
+    directory: bpy.props.StringProperty()
+
+    def execute(self, context):
+        mixalot = context.scene.mixalot
+        mixalot.importedFbxFilename = self.filename.encode('utf-8')
+        mixalot.importedFbxDirectoryPath = self.directory.encode('utf-8')
+        try:
+            commonmixalot.ImportFBX(self.filepath)
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: Failed to import FBX: '{self.filepath}': {e}")
+            return{'CANCELLED'}
+        mixalot.fbxFilename = self.filename.encode('utf-8')
+        if mixalot.cacheFbxExportOptions:
+            outPath = commonmixalot.GetFbxExportProperty(self.directory, "fbxOutputPath")
+            if outPath != "":
+                mixalot.fbxOutputPath = outPath
+        self.report({'OPERATOR'}, f"Imported FBX file: '{self.filepath}'")
+        _ShowMessageBox(f"Imported FBX file: '{self.filepath}'")
+        return {'FINISHED'}
+
+    def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
+        armatureObj = commonmixalot.GetFirstAmature(context.scene)
+        if not (armatureObj is None):
+            self.report({'ERROR_INVALID_INPUT'}, "Can not import if the scene already has Armature.")
+            return {'CANCELLED'}
+        wm = context.window_manager
+        wm.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+
 class ActorConvertOperator(bpy.types.Operator):
     """Applies Rotation to Armature object, removes leftover UV Maps (if enabled), etc"""
     bl_idname = "lumbermixalot.actor_convert"
@@ -340,6 +398,9 @@ class ExportFbxOperator(bpy.types.Operator):
         except Exception as e:
             self.report({'ERROR'}, 'Error: ' + str(e))
             return{'CANCELLED'}
+        mixalot = context.scene.mixalot
+        if mixalot.cacheFbxExportOptions:
+            commonmixalot.StoreFbxExportProperty(mixalot.importedFbxDirectoryPath.decode('UTF-8'), "fbxOutputPath", mixalot.fbxOutputPath)
         self.report({'OPERATOR'}, f"Scene exported as FBX file: '{out_filename}'")
         _ShowMessageBox(f"Scene exported as FBX file: '{out_filename}'")
         return {'FINISHED'}
@@ -374,6 +435,33 @@ class ExportFbxOperator(bpy.types.Operator):
 ###############################################################################
 # UI
 ###############################################################################
+class LUMBERMIXALOT_VIEW_3D_PT_fbx_import(bpy.types.Panel):
+    """Imports an FBX file that may contain Armature or Motions"""
+    bl_label = "FBX Import options"
+    bl_idname = "LUMBERMIXALOT_VIEW_3D_PT_fbx_import"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Lumbermixalot"
+    bl_order = 1 # Make sure this is always the bottom most panel.
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        row = layout.row()
+        row.operator("lumbermixalot.importfbx")
+        row = layout.row()
+        row.prop(scene.mixalot, "importedFbxFilename")
+        row.enabled = False
+        row = layout.row()
+        row.prop(scene.mixalot, "importedFbxDirectoryPath")
+        row.enabled = False
+
+
 class LUMBERMIXALOT_VIEW_3D_PT_actor_processing(bpy.types.Panel):
     """Actor processing panel 3D_View"""
     bl_label = "Actor Processing"
@@ -381,7 +469,7 @@ class LUMBERMIXALOT_VIEW_3D_PT_actor_processing(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Lumbermixalot"
-    bl_order = 0
+    bl_order = 2
 
     @classmethod
     def poll(cls, context):
@@ -423,7 +511,7 @@ class LUMBERMIXALOT_VIEW_3D_PT_root_motion_extraction(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Lumbermixalot"
-    bl_order = 1
+    bl_order = 3
 
     @classmethod
     def poll(cls, context):
@@ -478,7 +566,7 @@ class LUMBERMIXALOT_VIEW_3D_PT_root_motion_post_processing(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Lumbermixalot"
-    bl_order = 2
+    bl_order = 4
 
     @classmethod
     def poll(cls, context):
@@ -548,6 +636,8 @@ class LUMBERMIXALOT_VIEW_3D_PT_fbx_export(bpy.types.Panel):
         scene = context.scene
 
         row = layout.row()
+        row.prop(scene.mixalot, "cacheFbxExportOptions")
+        row = layout.row()
         row.prop(scene.mixalot, "fbxFilename")
         row = layout.row()
         row.prop(scene.mixalot, "fbxOutputPath")
@@ -560,11 +650,13 @@ class LUMBERMIXALOT_VIEW_3D_PT_fbx_export(bpy.types.Panel):
 ###############################################################################
 classes = (
     LumbermixalotPropertyGroup,
+    ImportFbxOperator,
     ActorConvertOperator,
     RootMotionExtractionOperator,
     RootMotionClearAnimationDataOperator,
     RootMotionRotateAnimationOperator,
     ExportFbxOperator,
+    LUMBERMIXALOT_VIEW_3D_PT_fbx_import,
     LUMBERMIXALOT_VIEW_3D_PT_actor_processing,
     LUMBERMIXALOT_VIEW_3D_PT_root_motion_extraction,
     LUMBERMIXALOT_VIEW_3D_PT_root_motion_post_processing,
