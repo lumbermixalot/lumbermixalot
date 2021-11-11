@@ -276,7 +276,7 @@ def _ExtractZaxisWorldQuaternions(armatureObj:bpy.types.Armature, worldQuaternio
     retMirroredQuaternionList = []
     retAnglesList = []
     for q in worldQuaternionsList:
-        angleAroundZaxis = ExtractAngleAroundUpVectorFromQuaternion(upBasis, forwardBasis, rightBasis, q, 1)
+        angleAroundZaxis = ExtractAngleAroundUpVectorFromQuaternion(upBasis, forwardBasis, rightBasis, q, 2)
         newQ = Quaternion(cmn.Axis.Z, angleAroundZaxis)
         newQMirrored = Quaternion(cmn.Axis.Z, angleAroundZaxis + math.pi)
         retQuaternionList.append(newQ)

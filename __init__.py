@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Root Motion Extractor Compatible With Mixamo & O3DE",
     "author": "Galib F. Arrieta",
-    "version": (3, 0, 1),
+    "version": (3, 0, 2),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to extract and bake Root motion for Mixamo Animations"),
