@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Root Motion Extractor Compatible With Mixamo & O3DE",
     "author": "Galib F. Arrieta",
-    "version": (3, 0, 2),
+    "version": (3, 0, 3),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to extract and bake Root motion for Mixamo Animations"),
@@ -626,10 +626,7 @@ class LUMBERMIXALOT_VIEW_3D_PT_fbx_export(bpy.types.Panel):
             return None
         if context.object.type != 'ARMATURE':
             return None
-        x, y, z = context.object.rotation_euler
-        # If the object world transform is 0, 0, 0 then the armature has been converted
-        # already and fbx export through lumbermixalot should be available
-        return (x == 0.0) and (y == 0.0) and (z == 0.0)
+        return True
 
     def draw(self, context):
         layout = self.layout

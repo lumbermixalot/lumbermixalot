@@ -212,7 +212,7 @@ def ExtractAngleAroundUpVectorFromQuaternion(upVector: Vector, forwardVector: Ve
     #euler = q.to_euler('XYZ')
     #return euler.z
     mQ = q.to_matrix()
-    qmForward = mQ.col[qForwardIndex]
+    qmForward = -mQ.col[qForwardIndex]
 
     # if @qmForward and @upVector are parallel to each other
     # the angle is 0.
