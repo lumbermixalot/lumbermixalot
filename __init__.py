@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Root Motion Extractor Compatible With Mixamo & O3DE",
     "author": "Galib F. Arrieta",
-    "version": (3, 0, 4),
+    "version": (3, 0, 5),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to extract and bake Root motion for Mixamo Animations"),
@@ -240,6 +240,14 @@ class ActorConvertOperator(bpy.types.Operator):
         if hipBoneObj is None:
             self.report({'ERROR'}, f"Error: The Armature '{armatureObj.name}' must have at least one bone.")
             return {'CANCELLED'}
+        
+        # REMARK: If the user plans to enable "Unpack Textures" when exporting the character FBX
+        # it was found by experience that maybe there's a bug in Blender. To have access
+        # to all the textures in "bpy.data.images" it is important to set the viewport shading
+        # model to "Material Preview".
+        if context.space_data.shading.type != 'MATERIAL':
+            context.space_data.shading.type = 'MATERIAL'
+        
         self.armatureObj = armatureObj
         return self.execute(context)
 
