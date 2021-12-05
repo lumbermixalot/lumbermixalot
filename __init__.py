@@ -25,7 +25,7 @@ SOFTWARE.
 bl_info = {
     "name": "Root Motion Extractor Compatible With Mixamo & O3DE",
     "author": "Galib F. Arrieta",
-    "version": (3, 0, 3),
+    "version": (3, 0, 4),
     "blender": (2, 80, 0),
     "location": "3D View > UI (Right Panel) > Lumbermixalot Tab",
     "description": ("Script to extract and bake Root motion for Mixamo Animations"),
@@ -147,6 +147,10 @@ class LumbermixalotPropertyGroup(bpy.types.PropertyGroup):
     cacheFbxExportOptions: bpy.props.BoolProperty(
         name="Cache FBX Export Options",
         description="If enabled, a json file will be created in the directory where the current scene was imported from.",
+        default = True)
+    unpackTextures: bpy.props.BoolProperty(
+        name="Unpack Textures",
+        description="If enabled, all textures found inside the imported FBX will be unpacked into the output directory. This is helpful to define the material",
         default = True)
     fbxFilename: bpy.props.StringProperty(
         name="Fbx name",
@@ -317,6 +321,7 @@ class RootMotionClearAnimationDataOperator(bpy.types.Operator):
                 self.report({'ERROR_INVALID_INPUT'}, 'Error: ' + str(e))
                 return{'CANCELLED'}
             self.report({'INFO'}, "Selected translation data has been cleared from Root Motion")
+        return {'FINISHED'}
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
         if context.object == None:
@@ -387,14 +392,14 @@ class ExportFbxOperator(bpy.types.Operator):
     """
     bl_idname = "lumbermixalot.exportfbx"
     bl_label = "Export FBX"
-    bl_description = "Export current scene as FBX."
+    bl_description = "Export current scene as FBX. Unpacks material textures (if enabled)"
     #Custom properties
     fbxFilename: str
     fbxOutputPath: str
 
     def execute(self, context):
         try:
-            out_filename = commonmixalot.ExportFBX(self.fbxFilename, self.fbxOutputPath)
+            out_filename = commonmixalot.ExportFBX(self.fbxFilename, self.fbxOutputPath, self.unpackTextures)
         except Exception as e:
             self.report({'ERROR'}, 'Error: ' + str(e))
             return{'CANCELLED'}
@@ -429,6 +434,7 @@ class ExportFbxOperator(bpy.types.Operator):
 
         self.fbxFilename = fbxFilename
         self.fbxOutputPath = fbxOutputPath
+        self.unpackTextures = mixalot.unpackTextures
         return self.execute(context)
 
 
@@ -634,6 +640,8 @@ class LUMBERMIXALOT_VIEW_3D_PT_fbx_export(bpy.types.Panel):
 
         row = layout.row()
         row.prop(scene.mixalot, "cacheFbxExportOptions")
+        row = layout.row()
+        row.prop(scene.mixalot, "unpackTextures")
         row = layout.row()
         row.prop(scene.mixalot, "fbxFilename")
         row = layout.row()

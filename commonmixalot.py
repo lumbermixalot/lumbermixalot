@@ -169,7 +169,7 @@ def _ExportFbxInternal(fbxFilePath: str):
     Exports the current scene with the right settings for O3DE.
     @fbxFilePath A fully qualified file path, suitable for file exporting.
     """
-    bpy.ops.export_scene.fbx(filepath=fbxFilePath, check_existing=False, axis_forward='-Y', axis_up='Z', path_mode='COPY')
+    bpy.ops.export_scene.fbx(filepath=fbxFilePath, check_existing=False, axis_forward='-Y', axis_up='Z')#, path_mode='COPY')
     print(f"FBX file '{fbxFilePath}' was exported successfully")
 
 
@@ -193,7 +193,56 @@ def _MakeFilePathForFBX(fbxFilename: str, fbxOutputPath: str) -> str:
     return os.path.join(fbxOutputPath, fbxFilename)
 
 
-def ExportFBX(fbxFilename: str, fbxOutputPath: str) -> str:
+def _CreateTexturesSubdir(outputDirectoryPath: str, subdirName: str = "textures") -> str:
+    """
+    Only if there's at least one texture in the scene, it will create the directory
+    @outputDirectoryPath/@subdirName, if it doesn't exist.
+    In case of failure returns the same @outputDirectoryPath.
+    In case of success returns @outputDirectoryPath/@subdirName
+    """
+    hasImage = False
+    for image in bpy.data.images:
+        if not image.has_data:
+            continue
+        hasImage = True
+        break
+    if not hasImage:
+        return outputDirectoryPath
+    finalDir = os.path.join(outputDirectoryPath, subdirName)
+    if not os.path.exists(finalDir):
+        try:
+            os.makedirs(finalDir)
+        except:
+            print(f"Failed to create output textures dir: '{finalDir}'")
+            return outputDirectoryPath
+    return finalDir
+
+
+def _UnpackTextures(outputDirectoryPath: str, filenamePrefix: str):
+    """
+    Unpacks all the textures found in the current scene into @outputDirectoryPath.
+    Usually the textures come with a name, but the final filename will be prefixed
+    with @filenamePrefix
+    """
+    outputDirectoryPath = _CreateTexturesSubdir(outputDirectoryPath)
+    for image in bpy.data.images:
+        if not image.has_data:
+            continue
+        originalFilepath = image.filepath         # Save for later
+        originalFilepathRaw = image.filepath_raw          # Save for later
+        originalImageFilename = os.path.basename(image.filepath)
+        newFilename = f"{filenamePrefix}_{originalImageFilename}"
+        finalOutputPath = os.path.join(outputDirectoryPath, newFilename)
+        image.filepath = finalOutputPath
+        image.filepath_raw = finalOutputPath
+        image.save()
+        print(f"Unpacked Texture {image.name} As: {finalOutputPath}")
+        # Leave as is.
+        image.filepath = originalFilepath
+        image.filepath_raw = originalFilepathRaw
+
+
+def ExportFBX(fbxFilename: str, fbxOutputPath: str, unpackTextures: bool) -> str:
     """
     Convenience function to export the current scene as FBX per the required
     O3DE configuration. 
@@ -209,6 +258,9 @@ def ExportFBX(fbxFilename: str, fbxOutputPath: str) -> str:
     if outputFilename is None:
         raise Exception("Undefined output filename")
     _ExportFbxInternal(outputFilename)
+    if unpackTextures:
+        prefix, _ = os.path.splitext(fbxFilename)
+        _UnpackTextures(fbxOutputPath, prefix)
     return outputFilename
 
 
@@ -223,6 +275,29 @@ def GetFirstAmature(scene: bpy.types.Scene):
     return None
 
 
+def _ClearCachedCollectionData(collection: bpy.types.bpy_prop_collection, collectionTypeName: str = "object"):
+    """
+    Generic function that can clear the content of any collection in the scene.
+    """
+    dataNames = []
+    for name in collection.keys():
+        dataNames.append(name)
+    if len(dataNames) > 0:
+        print(f"Found {len(dataNames)} leftover {collectionTypeName}s. Will proceed to remove them...")
+        for name in dataNames:
+            collection.remove(collection[name])
+            print(f"Removed leftover {collectionTypeName} '{name}'")
+        print(f"Removed all leftover {collectionTypeName}s")
+
+
+def _ClearOldAnimationData():
+    _ClearCachedCollectionData(bpy.data.actions, "action")
+
+
+def _ClearOldTextureData():
+    _ClearCachedCollectionData(bpy.data.images, "texture")
+
+
 def ImportFBX(fbxFilepath: str):
     """
     Convenience function to  import an FBX file. 
@@ -233,17 +308,9 @@ def ImportFBX(fbxFilepath: str):
     
     If Successful, returns the fully qualified path of the exported FBX file.
     """
-    #Before importing, let's clear any left over animation data.
-    oldActions = bpy.data.actions
-    actionNames = []
-    for actionName in oldActions.keys():
-        actionNames.append(actionName)
-    if len(actionNames) > 0:
-        print(f"Found {len(actionNames)} leftover actions. Will proceed to remove them...")
-        for actionName in actionNames:
-            oldActions.remove(oldActions[actionName])
-            print(f"Remove leftover action '{actionName}'")
-        print("Removed all leftover actions")
+    #Before importing, let's clear any left over animation and texture data.
+    _ClearOldAnimationData()
+    _ClearOldTextureData()
     bpy.ops.import_scene.fbx(filepath=fbxFilepath)
 
 
